@@ -7,7 +7,7 @@ import torch
 import torchvision
 from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.resnet import ResNet50_Weights
-
+import numpy as np
 
 def store_image_detection_features(data_path):
     data = []
@@ -43,8 +43,7 @@ def store_image_detection_features(data_path):
                 masks = output['masks'][indices]
                 img_feats = masks*images[i]
                 print(img_feats.size())
-                torch.save(img_feats,"{}.pt".format(os.path.splitext(image_path[i])[0]))
-
+                torch.save(img_feats.detach(),"{}.pt".format(os.path.splitext(image_path[i])[0]))
     
 if __name__=="__main__":
     store_image_detection_features("./ssl_gnn_multimodal/Dataset/hateful_memes/")
