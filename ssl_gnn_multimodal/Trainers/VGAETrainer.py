@@ -1,4 +1,5 @@
 import os
+import gc
 from Models.DeepVGAE import DeepVGAE,GCNVGAEEncoder,GATVGAEEncoder
 from Trainers import MMGNNTrainer
 from Models.GraphClassifier import GraphClassifier
@@ -8,6 +9,11 @@ from torch_geometric.utils import negative_sampling
 from torch_geometric.nn import MLP, MLPAggregation,SetTransformerAggregation,DeepSetsAggregation,GRUAggregation
 from sklearn.metrics import average_precision_score, roc_auc_score,accuracy_score,f1_score
 import numpy as np
+
+import torch_geometric.transforms as T
+from torch_geometric.data import Data as GraphData
+from torch_geometric.loader import DataLoader as GDataLoader
+
 from config import PROJECTION_DIM,GNN_OUT_CHANNELS
 
 
@@ -33,15 +39,15 @@ class VGAETrainer(MMGNNTrainer):
         self.setTrain(self.trainable_models)
         train_loss = 0
         total = 0
-        for images, tokenized_text, attention_masks, labels in self.train_loader:
-            images, tokenized_text, attention_masks, labels = images.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
+        for images, image_features, tokenized_text, attention_masks, labels in self.train_loader:
+            images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
             self.optimizer.zero_grad()
             # images, image_features, text_features,labels
             text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-            image_feat_embeddings = self.get_image_feature_embeddings(images)
+            image_feat_data = self.get_image_feature_embeddings(image_features)
             image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-            g_data_loader = self.generate_subgraph(image_embeddings,image_feat_embeddings,text_embeddings,labels)
+            g_data_loader = self.generate_subgraph(image_embeddings,image_feat_data,text_embeddings,labels)
             
             g_data = next(iter(g_data_loader))
             g_data = g_data.to(self.device)
@@ -74,13 +80,13 @@ class VGAETrainer(MMGNNTrainer):
         proba = None
         out_label_ids = None
         with torch.no_grad():
-            for images, tokenized_text, attention_masks, labels in data_loader:
-                images, tokenized_text, attention_masks, labels = images.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
+            for images, image_features, tokenized_text, attention_masks, labels in data_loader:
+                images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
                 text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-                image_feat_embeddings = self.get_image_feature_embeddings(images)
+                image_feat_data = self.get_image_feature_embeddings(image_features)
                 image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-                g_data_loader = self.generate_subgraph(image_embeddings,image_feat_embeddings,text_embeddings,labels)
+                g_data_loader = self.generate_subgraph(image_embeddings,image_feat_data,text_embeddings,labels)
                 
 
                 g_data = next(iter(g_data_loader))
@@ -153,6 +159,50 @@ class VGAETrainer(MMGNNTrainer):
         print("{} --- Epoch : {} | roc_auc_score : {} | average_precision_score : {} | accuracy : {} | micro_f1 : {}".format(data_type,epoch,metrics['auc'],metrics['avg_precision'],metrics['accuracy'],metrics['micro_f1']))    
         return metrics                       
 
+    def get_image_feature_embeddings(self,image_features):
+        embeddings = []
+        b,n = image_features.shape[0],image_features.shape[1]
+        batch_mapping = []
+        reshaped_tensor  = []
+        for i in range(b):
+            for j in range(n):
+                if torch.count_nonzero(image_features[i][j])!=0:
+                    reshaped_tensor.append(image_features[i][j])
+                    batch_mapping.append(i)
+        reshaped_tensor = torch.stack(reshaped_tensor)
+        embeddings = self.models['image_projection'](self.models['image_encoder'](reshaped_tensor))
+        # #explicit garbage collection
+        # del image_features
+        # del reshaped_tensor
+        # gc.collect()
+        return embeddings,batch_mapping
+    
+    def generate_subgraph(self,image_embeddings,image_feat_data,text_embeddings,labels):
+        data_list = []
+        image_feat_embeddings, batch_mapping = image_feat_data
+        j,k= 0,0
+        for i in range(len(image_embeddings)):
+            while len(batch_mapping)>k and batch_mapping[k]==i:
+                k+=1
+            n_img_features = k-j
+            data = GraphData().to(self.device)
+            data.x = torch.cat([image_embeddings[i].unsqueeze(0),text_embeddings[i].unsqueeze(0),image_feat_embeddings[j:k]])
+            j = k
+            imgEdges = torch.tensor([[0]*(n_img_features),[i+2 for i in range(n_img_features)]],dtype=torch.long)
+            textEdges = torch.tensor([[1]*(n_img_features),[i+2 for i in range(n_img_features)]],dtype=torch.long)
+
+            data.edge_index = torch.cat([imgEdges,textEdges],dim=1)
+            data.y = labels[i]
+            data = T.ToUndirected()(data)
+            data = T.NormalizeFeatures()(data)
+            data_list.append(data)
+        
+        loader = GDataLoader(data_list, batch_size=self.batch_size*self.n_gpus)
+        # return Batch().from_data_list(data_list)
+        return loader
+
+    
+    
     def save_checkpoint(self,epoch, metrics):
         training_type = "classifier"
         if self.pretrain:

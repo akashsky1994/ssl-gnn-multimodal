@@ -3,16 +3,17 @@ import json
 import time
 from PIL import Image
 
+from tqdm import tqdm
 import torch
 import torchvision
 from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.resnet import ResNet50_Weights
-
+import numpy as np
 
 def store_image_detection_features(data_path):
     data = []
-    device = 'cpu'
-    BATCHSIZE = 2
+    device = 'cuda'
+    BATCHSIZE = 32
     image_feature_model = torchvision.models.detection.maskrcnn_resnet50_fpn(
             weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT,
             weights_backbone=ResNet50_Weights.DEFAULT
@@ -24,12 +25,14 @@ def store_image_detection_features(data_path):
                 ]
             )
     
-    for data_type in ['train','dev','test']:
+    for data_type in ['train','dev','test','dev_unseen','test_unseen']:
         data = [json.loads(l) for l in open(os.path.join(data_path,data_type+'.jsonl'))]
-        for i in range(0,len(data),BATCHSIZE):
-            image_path = [os.path.join(data_path, data[i]["img"]) for i in list(range(i,i+BATCHSIZE))]
+        n = len(data)
+        for i in tqdm(range(0,n,BATCHSIZE)):
+            j = n if (i+BATCHSIZE)>n else i+BATCHSIZE
+            image_path = [os.path.join(data_path, data[i]["img"]) for i in list(range(i,j))]
             images = torch.stack([image_transform(Image.open(image_path[i]).convert("RGB")) for i in range(len(image_path))])
-
+            images = images.to(device)
             start = time.perf_counter()
             outputs = image_feature_model(images)
             print(time.perf_counter()-start)
@@ -42,10 +45,9 @@ def store_image_detection_features(data_path):
                 
                 masks = output['masks'][indices]
                 img_feats = masks*images[i]
-                print(img_feats.size())
-                torch.save(img_feats,"{}.pt".format(os.path.splitext(image_path[i])[0]))
-
+                # print(img_feats.size())
+                torch.save(img_feats.detach().cpu(),"{}.pt".format(os.path.splitext(image_path[i])[0]))
     
 if __name__=="__main__":
-    store_image_detection_features("./ssl_gnn_multimodal/Dataset/hateful_memes/")
+    store_image_detection_features("../datasets/hateful_memes/")
     
