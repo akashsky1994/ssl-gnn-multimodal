@@ -28,7 +28,7 @@ class VGAETrainer(MMGNNTrainer):
         self.models['gnn_encoder'] = GATVGAEEncoder(PROJECTION_DIM,2*GNN_OUT_CHANNELS,GNN_OUT_CHANNELS,4,0.3)
         self.models['graph'] = DeepVGAE(self.models['gnn_encoder']).to(self.device)
         if self.pretrain is not True:
-            max_num_nodes_in_graph = 12
+            max_num_nodes_in_graph = 22
             self.models['readout_aggregation'] = MLPAggregation(GNN_OUT_CHANNELS,2*GNN_OUT_CHANNELS,max_num_nodes_in_graph,num_layers=1)
             self.models['classifier'] = GraphClassifier(1024,1, 2,self.models['readout_aggregation'], True,0.5).to(self.device)
             self.trainable_models = ['graph','classifier']
@@ -45,9 +45,9 @@ class VGAETrainer(MMGNNTrainer):
             self.optimizer.zero_grad()
             # images, image_features, text_features,labels
             text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-            image_feat_data = self.get_image_feature_embeddings(image_features)
+            image_feat_data = self.get_image_feature_embeddings_v2(image_features)
             image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-            g_data_loader = self.generate_subgraph(image_embeddings,image_feat_data,text_embeddings,labels)
+            g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
             
             g_data = next(iter(g_data_loader))
             g_data = g_data.to(self.device)
@@ -84,9 +84,9 @@ class VGAETrainer(MMGNNTrainer):
                 images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
                 text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-                image_feat_data = self.get_image_feature_embeddings(image_features)
+                image_feat_data = self.get_image_feature_embeddings_v2(image_features)
                 image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-                g_data_loader = self.generate_subgraph(image_embeddings,image_feat_data,text_embeddings,labels)
+                g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
                 
 
                 g_data = next(iter(g_data_loader))
@@ -152,56 +152,8 @@ class VGAETrainer(MMGNNTrainer):
             "accuracy":round(accuracy_score(out_label_ids, preds),3),
             "micro_f1":round(f1_score(out_label_ids, preds, average="micro"),3)
         }
-        # if self.pretrain is not True:
-        #     metrics['accuracy'] = round(accuracy_score(out_label_ids, preds),3)
-        #     metrics['micro_f1'] = round(f1_score(out_label_ids, preds, average="micro"),3)
-
         print("{} --- Epoch : {} | roc_auc_score : {} | average_precision_score : {} | accuracy : {} | micro_f1 : {}".format(data_type,epoch,metrics['auc'],metrics['avg_precision'],metrics['accuracy'],metrics['micro_f1']))    
         return metrics                       
-
-    def get_image_feature_embeddings(self,image_features):
-        embeddings = []
-        b,n = image_features.shape[0],image_features.shape[1]
-        batch_mapping = []
-        reshaped_tensor  = []
-        for i in range(b):
-            for j in range(n):
-                if torch.count_nonzero(image_features[i][j])!=0:
-                    reshaped_tensor.append(image_features[i][j])
-                    batch_mapping.append(i)
-        reshaped_tensor = torch.stack(reshaped_tensor)
-        embeddings = self.models['image_projection'](self.models['image_encoder'](reshaped_tensor))
-        # #explicit garbage collection
-        # del image_features
-        # del reshaped_tensor
-        # gc.collect()
-        return embeddings,batch_mapping
-    
-    def generate_subgraph(self,image_embeddings,image_feat_data,text_embeddings,labels):
-        data_list = []
-        image_feat_embeddings, batch_mapping = image_feat_data
-        j,k= 0,0
-        for i in range(len(image_embeddings)):
-            while len(batch_mapping)>k and batch_mapping[k]==i:
-                k+=1
-            n_img_features = k-j
-            data = GraphData().to(self.device)
-            data.x = torch.cat([image_embeddings[i].unsqueeze(0),text_embeddings[i].unsqueeze(0),image_feat_embeddings[j:k]])
-            j = k
-            imgEdges = torch.tensor([[0]*(n_img_features),[i+2 for i in range(n_img_features)]],dtype=torch.long)
-            textEdges = torch.tensor([[1]*(n_img_features),[i+2 for i in range(n_img_features)]],dtype=torch.long)
-
-            data.edge_index = torch.cat([imgEdges,textEdges],dim=1)
-            data.y = labels[i]
-            data = T.ToUndirected()(data)
-            data = T.NormalizeFeatures()(data)
-            data_list.append(data)
-        
-        loader = GDataLoader(data_list, batch_size=self.batch_size*self.n_gpus)
-        # return Batch().from_data_list(data_list)
-        return loader
-
-    
     
     def save_checkpoint(self,epoch, metrics):
         training_type = "classifier"
