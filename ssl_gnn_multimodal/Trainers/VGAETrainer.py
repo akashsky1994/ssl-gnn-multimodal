@@ -161,18 +161,15 @@ class VGAETrainer(MMGNNTrainer):
 
     def get_image_feature_embeddings(self,image_features):
         embeddings = []
-        b,n = image_features[0],image_features[1]
+        b,n = image_features.shape[0],image_features.shape[1]
         batch_mapping = []
-        reshaped_tensor  = None
+        reshaped_tensor  = []
         for i in range(b):
             for j in range(n):
-                if torch.is_nonzero(image_features[i][j]):
-                    if reshaped_tensor is None:
-                        reshaped_tensor = image_features[i][j]
-                    else:
-                        reshaped_tensor = torch.cat([reshaped_tensor,image_features[i][j]],dim=0)
+                if torch.count_nonzero(image_features[i][j])!=0:
+                    reshaped_tensor.append(image_features[i][j])
                     batch_mapping.append(i)
-
+        reshaped_tensor = torch.stack(reshaped_tensor)
         embeddings = self.models['image_projection'](self.models['image_encoder'](reshaped_tensor))
         # #explicit garbage collection
         # del image_features
@@ -185,7 +182,7 @@ class VGAETrainer(MMGNNTrainer):
         image_feat_embeddings, batch_mapping = image_feat_data
         j,k= 0,0
         for i in range(len(image_embeddings)):
-            while len(batch_mapping)>=k and batch_mapping[k]==i:
+            while len(batch_mapping)>k and batch_mapping[k]==i:
                 k+=1
             n_img_features = k-j
             data = GraphData().to(self.device)

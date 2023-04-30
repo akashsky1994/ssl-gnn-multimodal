@@ -25,7 +25,7 @@ def store_image_detection_features(data_path):
                 ]
             )
     
-    for data_type in ['dev_unseen','test_unseen']:
+    for data_type in ['train','dev','test','dev_unseen','test_unseen']:
         data = [json.loads(l) for l in open(os.path.join(data_path,data_type+'.jsonl'))]
         n = len(data)
         for i in tqdm(range(0,n,BATCHSIZE)):
@@ -46,7 +46,7 @@ def store_image_detection_features(data_path):
                 masks = output['masks'][indices]
                 img_feats = masks*images[i]
                 # print(img_feats.size())
-                torch.save(img_feats.detach(),"{}.pt".format(os.path.splitext(image_path[i])[0]))
+                torch.save(img_feats.detach().cpu(),"{}.pt".format(os.path.splitext(image_path[i])[0]))
     
 if __name__=="__main__":
     store_image_detection_features("../datasets/hateful_memes/")
