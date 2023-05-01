@@ -76,9 +76,9 @@ class GMAETrainer(MMGNNTrainer):
                 images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
                 text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-                image_feat_embeddings = self.get_image_feature_embeddings(images)
+                image_feat_data = self.get_image_feature_embeddings_v2(image_features)
                 image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-                g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_embeddings,text_embeddings,labels)
+                g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
                 
                 g_data = next(iter(g_data_loader))
                 g_data = g_data.to(self.device)
