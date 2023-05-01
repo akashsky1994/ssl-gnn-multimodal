@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 
 import os
-
 import time
 from tqdm import tqdm
 from Dataset import load_dataset
@@ -29,6 +28,7 @@ class BaseTrainer():
         self.pretrain = self.args.pretrain
         self.best_acc = 0
         self.best_auc = 0
+        self.best_loss = float("inf")
         self.trainable_models = []
         self.set_device()
         

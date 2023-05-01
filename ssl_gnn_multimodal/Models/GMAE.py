@@ -64,10 +64,13 @@ class GMAE(GAE):
             token_nodes = mask_nodes[perm_mask[: int(self._mask_token_rate * num_mask_nodes)]]
             noise_nodes = mask_nodes[perm_mask[-int(self._replace_rate * num_mask_nodes):]]
             noise_to_be_chosen = torch.randperm(num_nodes, device=x.device)[:num_noise_nodes]
-
-            out_x = x.clone()
-            out_x[token_nodes] = 0.0
-            out_x[noise_nodes] = x[noise_to_be_chosen]
+            try:
+                out_x = x.clone()
+                out_x[token_nodes] = 0.0
+                out_x[noise_nodes] = x[noise_to_be_chosen]
+            except Exception as e:
+                print(e)
+                print(num_nodes,noise_nodes,noise_to_be_chosen)
         else:
             out_x = x.clone()
             token_nodes = mask_nodes

@@ -1,11 +1,13 @@
+from typing import Any, Callable, Dict, Optional, Union
 import torch
-from torch_geometric.nn import GATv2Conv
-import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool
 from torch.nn import Linear
+import torch.nn.functional as F
+
+from torch_geometric.nn import GATv2Conv,global_mean_pool
+from torch_geometric.nn.models import GAT #TODO
+from torch_geometric.nn.models.jumping_knowledge import JumpingKnowledge
+
 from utils import get_normalization,get_activation
-
-
 
 class GATClassifier(torch.nn.Module):
     def __init__(self,num_features,num_classes=1,training=True):
@@ -37,9 +39,9 @@ class GATClassifier(torch.nn.Module):
         return out,x    #,F.log_softmax(x, dim=1)
     
 
-class GAT(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels,num_layers,in_heads,out_heads,norm_type="graph_norm",activation_type="prelu",dropout=0.3):
-        super(GAT, self).__init__()
+class DeepGAT(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels,num_layers,in_heads,out_heads,norm_type="graph_norm",activation_type="prelu",dropout=0.3,jk="lstm"):
+        super(DeepGAT, self).__init__()
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
@@ -74,19 +76,20 @@ class GAT(torch.nn.Module):
             self.norms.append(torch.nn.Identity())
             self.acts.append(torch.nn.Identity())
 
-
+        # self.jk = JumpingKnowledge(jk, hidden_channels, num_layers)
         self.head = torch.nn.Identity()
 
-    def forward(self, x, edge_index, return_hidden=False):
+    def forward(self, x, edge_index, return_hidden=False,sigmoid: bool = False):
         h = x
         hidden_list = []
         for i, (gat_layer, norm, act) in enumerate(zip(self.gat_layers, self.norms,self.acts)):
             h = F.dropout(h, p=self.dropout, training=self.training)
             h = act(norm(gat_layer(h,edge_index)))
             hidden_list.append(h)
-
+        
         # output projection
+        h = torch.sigmoid(self.head(h)) if sigmoid else self.head(h)
         if return_hidden:
-            return self.head(h), hidden_list
+            return h, hidden_list
         else:
-            return self.head(h)
+            return h

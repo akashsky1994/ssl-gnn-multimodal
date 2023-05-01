@@ -5,10 +5,10 @@ from torch_geometric.nn import global_mean_pool
 from torch_geometric.nn import MLP, MLPAggregation,SetTransformerAggregation
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, average_precision_score
 
-class GraphClassifier(torch.nn.Module):
+class MLPClassifier(torch.nn.Module):
     def __init__(self, in_channels, out_channels, num_layers,aggrFn=global_mean_pool, batch_norm=True,
                  dropout=0.5):
-        super(GraphClassifier, self).__init__()
+        super(MLPClassifier, self).__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
