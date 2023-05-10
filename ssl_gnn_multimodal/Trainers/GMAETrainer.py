@@ -1,42 +1,52 @@
 
 import os
 import torch
-import torchvision
 import numpy as np
-from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, average_precision_score
-from torch_geometric.utils import negative_sampling
+from torch_geometric.nn import MLPAggregation
 
 from Trainers import MMGNNTrainer
 from Models.Encoder import ImageEncoder,TextEncoder,ProjectionHead
 from Models.GMAE import GMAE
-from Models.GAT import GAT
-from config import PROJECTION_DIM
+from Models.GAT import DeepGAT
+from Models.MLPClassifier import MLPClassifier
+
+from utils import evaluate_graph_embeddings_using_svm,graph_emb_pooling
+from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, average_precision_score
+
 class GMAETrainer(MMGNNTrainer):
-    def __init__(self, args) -> None:
-        super().__init__(args)
+    def __init__(self, config) -> None:
+        super().__init__(config)
+        if self.pretrain is not True: # finetuning 1/10 of pretrain lr 
+            self.lr = self.lr*1e-1
         print("Trainable Models",self.trainable_models)
 
     def build_model(self):
+        GNN_OUT_CHANNELS = self.config['gnn_out_channels']
+        PROJECTION_DIM = self.config['projection_dim']
         # Model
         print('==> Building model..')
         self.models = {
-            'image_encoder': ImageEncoder().to(self.device),
-            'text_encoder': TextEncoder().to(self.device),
-            'image_projection': ProjectionHead(2048,PROJECTION_DIM).to(self.device),
-            'text_projection': ProjectionHead(768,PROJECTION_DIM).to(self.device),
-            'graph_encoder': GAT(in_channels=PROJECTION_DIM,hidden_channels=512,out_channels=1024,num_layers=3,in_heads=4,out_heads=1).to(self.device),
-            'graph_decoder':GAT(in_channels=1024,hidden_channels=512,out_channels=PROJECTION_DIM,num_layers=1,in_heads=1,out_heads=1).to(self.device)
+            'image_encoder': ImageEncoder(trainable=self.pretrain).to(self.device),
+            'text_encoder': TextEncoder(trainable=self.pretrain).to(self.device),
+            'image_projection': ProjectionHead(2048,PROJECTION_DIM,trainable=self.pretrain).to(self.device),
+            'text_projection': ProjectionHead(768,PROJECTION_DIM,trainable=self.pretrain).to(self.device)
         }
-        self.models['graph'] = GMAE(self.models['graph_encoder'],self.models['graph_decoder']).to(self.device)
+        graph_encoder = DeepGAT(in_channels=PROJECTION_DIM,hidden_channels=2*GNN_OUT_CHANNELS,out_channels=GNN_OUT_CHANNELS,num_layers=3,nheads=4,last_layer=True,jk=self.config.get('jk'),norm_type="graph_norm",activation_type="prelu",dropout=0.3).to(self.device)
+        graph_decoder = DeepGAT(in_channels=GNN_OUT_CHANNELS,hidden_channels=GNN_OUT_CHANNELS,out_channels=PROJECTION_DIM,num_layers=1,nheads=4,last_layer=False,norm_type="graph_norm",activation_type="prelu",dropout=0.3).to(self.device)
+        self.models['graph'] = GMAE(graph_encoder,graph_decoder).to(self.device)
         self.trainable_models = ['image_encoder','text_encoder','image_projection','text_projection','graph']
         
         if self.pretrain is not True:
-            raise NotImplementedError("Classifier not implemented") #TODO
+            max_num_nodes_in_graph = 22
+            readout_aggregation = MLPAggregation(GNN_OUT_CHANNELS,2*GNN_OUT_CHANNELS,max_num_nodes_in_graph,num_layers=1)
+            self.models['classifier'] = MLPClassifier(2*GNN_OUT_CHANNELS,1, 2,readout_aggregation, True,0.5).to(self.device)
+            self.trainable_models = ['graph','classifier']
 
     def train_epoch(self,epoch):
-        self.setTrain()
+        self.setTrain(self.trainable_models)
         train_loss = 0
         total = 0
+        
         for images, image_features, tokenized_text, attention_masks, labels in self.train_loader:
             images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
@@ -48,12 +58,18 @@ class GMAETrainer(MMGNNTrainer):
             
             g_data = next(iter(g_data_loader))
             g_data = g_data.to(self.device)
-            
             if self.pretrain is True:
-                loss,_ = self.models['graph'](g_data.x,g_data.edge_index)
+                recon_loss,_ = self.models['graph'](g_data.x,g_data.edge_index)
+                encoder_loss = self.models['graph'].encoder.get_loss()
+                loss = recon_loss
+                if encoder_loss is not None:
+                    loss = self.config['recon_loss_coef']*recon_loss + self.config['encoder_loss_coef']*encoder_loss
             else:
-                raise NotImplementedError("Not implemented") #TODO
-            
+                # hateful classification
+                enc_rep = self.models['graph'].encoder(g_data.x,g_data.edge_index)
+                output = self.models['classifier'](enc_rep,g_data)
+                loss = self.models['classifier'].criterion(output, g_data.y)
+                
             loss.backward()
             self.optimizer.step()
 
@@ -76,78 +92,82 @@ class GMAETrainer(MMGNNTrainer):
                 images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
                 text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-                image_feat_embeddings = self.get_image_feature_embeddings(images)
+                image_feat_data = self.get_image_feature_embeddings_v2(image_features)
                 image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-                g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_embeddings,text_embeddings,labels)
+                g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
                 
                 g_data = next(iter(g_data_loader))
                 g_data = g_data.to(self.device)
                 
-                
-                
                 if self.pretrain is True:
+                #pretraining
+                    # graph_emb = graph_emb_pooling("mean",enc_rep,g_data)
                     loss,_ = self.models['graph'](g_data.x,g_data.edge_index)
-                    z = self.models['graph'].encoder(g_data.x, g_data.edge_index)
-                    neg_edge_index = negative_sampling(g_data.edge_index, z.size(0))
-        
-                    pos_y = z.new_ones(g_data.edge_index.size(1))
-                    neg_y = z.new_zeros(neg_edge_index.size(1))
-                    y = torch.cat([pos_y, neg_y], dim=0)
-
-                    pos_pred = self.models['graph'].decoder(z, g_data.edge_index, sigmoid=True)
-                    neg_pred = self.models['graph'].decoder(z, neg_edge_index, sigmoid=True)
-                    pred = torch.cat([pos_pred, neg_pred], dim=0)
-                    if proba is None:
-                        proba = pred.detach().cpu().numpy() 
-                    else:
-                        proba = np.append(proba,pred.detach().cpu().numpy(),axis=0)
-                    
-                    if preds is None:
-                        preds = pred.detach().cpu().numpy() > 0.5
-                    else:
-                        preds = np.append(preds,pred.detach().cpu().numpy()> 0.5,axis=0)
-                        
-                    if out_label_ids is None:
-                        out_label_ids = y.detach().cpu().numpy()
-                    else:
-                        out_label_ids = np.append(out_label_ids,y.detach().cpu().numpy())
-
                 else:
-                    raise NotImplementedError("Not implemented") #TODO
+                # hateful classification
+                    enc_rep = self.models['graph'].encoder(g_data.x, g_data.edge_index)
+                    output = self.models['classifier'](enc_rep,g_data)
+                    loss = self.criterion(output, g_data.y)
+                    if out_label_ids is None:
+                        out_label_ids = labels.detach().cpu().numpy()
+                    else:
+                        out_label_ids = np.append(out_label_ids,labels.detach().cpu().numpy())
 
-                
+                    if proba is None:
+                        proba = torch.sigmoid(output).detach().cpu().numpy()
+                    else:
+                        proba = np.append(proba, torch.sigmoid(output).detach().cpu().numpy(), axis=0)
+
                 test_loss += loss.item()
                 total += labels.size(0)
-
+        
         metrics = {
-            "loss": test_loss/total,
-            "auc": round(roc_auc_score(out_label_ids,proba),3),
-            "avg_precision": round(average_precision_score(out_label_ids,proba),3),
-            "accuracy":round(accuracy_score(out_label_ids, preds),3),
-            "micro_f1":round(f1_score(out_label_ids, preds, average="micro"),3)
+            "loss": test_loss/total
         }
-        print("{} --- Epoch : {} | roc_auc_score : {} | average_precision_score : {} | accuracy : {} | micro_f1 : {}".format(data_type,epoch,metrics['auc'],metrics['avg_precision'],metrics['accuracy'],metrics['micro_f1']))    
+        if self.pretrain is not True:
+            preds = (proba > 0.5).astype(proba.dtype)
+            evaluate_metrics = {
+                "auc": round(roc_auc_score(out_label_ids,proba),3),
+                "avg_precision": round(average_precision_score(out_label_ids,proba),3),
+                "accuracy":round(accuracy_score(out_label_ids, preds),3),
+                "micro_f1":round(f1_score(out_label_ids, preds, average="micro"),3)
+            }
+            metrics = {**metrics,**evaluate_metrics}
+
+        print("{} --- Epoch : {}".format(data_type,epoch),str(metrics))  
+        # if self.pretrain is True:
+        #     graph_emb_metrics = evaluate_graph_embeddings_using_svm(graph_embs,out_label_ids)  
+        #     print("Graph Embedding SVC Metrics:", str(graph_emb_metrics))
+
         return metrics   
-    
+
+
     def save_checkpoint(self,epoch, metrics):
-        training_type = "classifier"
-        if self.pretrain:
-            training_type = "pretrain"
+        outpath = None
         try:
-            if metrics['auc'] > self.best_auc:
-                outpath = os.path.join('./checkpoints',self.model_name, "{}_{}_{}".format(training_type,metrics['auc'],metrics['avg_precision']))
+            if self.pretrain:
+                training_type = "pretrain"
+                if metrics['loss']<self.best_loss:
+                    outpath = os.path.join('./checkpoints',self.model_name, "{}_{}".format(training_type,metrics['loss']))
+                    self.best_loss = metrics['loss']
+            else:
+                training_type = "classifier"
+                if metrics['auc'] > self.best_auc:
+                    outpath = os.path.join('./checkpoints',self.model_name, "{}_{}_{}".format(training_type,metrics['auc'],metrics['avg_precision']))
+                    self.best_auc = metrics['auc']
+
+            if outpath:
                 if not os.path.exists(outpath):
                     os.makedirs(outpath)
-                
-                    print('Saving..')
-                    for name in self.trainable_models:
-                        savePath = os.path.join(outpath, "{}.pth".format(name))
-                        toSave = self.models[name].state_dict()
-                        torch.save(toSave, savePath)
-                    savePath = os.path.join(outpath, "{}.pth".format(self.optim.lower()))
-                    torch.save(self.optimizer.state_dict(), savePath)
-                    # self.best_acc = metrics['accuracy']
-                    self.best_auc = metrics['auc']
-                    print("best auc:", metrics['auc'],"avg_precision:",metrics['avg_precision'])
+                print('Saving..')
+                for name in self.models:
+                    savePath = os.path.join(outpath, "{}.pth".format(name))
+                    toSave = self.models[name].state_dict()
+                    torch.save(toSave, savePath)
+                savePath = os.path.join(outpath, "{}.pth".format(self.optim.lower()))
+                torch.save(self.optimizer.state_dict(), savePath)
+            
+                print("best metrics:", str(metrics))
+
         except Exception as e:
             print("Error:",e)

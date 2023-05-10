@@ -2,7 +2,7 @@ import os
 import gc
 from Models.DeepVGAE import DeepVGAE,GCNVGAEEncoder,GATVGAEEncoder
 from Trainers import MMGNNTrainer
-from Models.GraphClassifier import GraphClassifier
+from Models.MLPClassifier import MLPClassifier
 
 import torch
 from torch_geometric.utils import negative_sampling
@@ -14,15 +14,14 @@ import torch_geometric.transforms as T
 from torch_geometric.data import Data as GraphData
 from torch_geometric.loader import DataLoader as GDataLoader
 
-from config import PROJECTION_DIM,GNN_OUT_CHANNELS
-
-
 class VGAETrainer(MMGNNTrainer):
-    def __init__(self, args) -> None:
-        super().__init__(args)
+    def __init__(self, config) -> None:
+        super().__init__(config)
         print("Trainable Models",self.trainable_models)
 
     def build_model(self):
+        GNN_OUT_CHANNELS = self.config['gnn_out_channels']
+        PROJECTION_DIM = self.config['projection_dim']
         super().build_model()
         self.trainable_models = ['image_encoder','text_encoder','image_projection','text_projection','graph']
         self.models['gnn_encoder'] = GATVGAEEncoder(PROJECTION_DIM,2*GNN_OUT_CHANNELS,GNN_OUT_CHANNELS,4,0.3)
@@ -30,7 +29,7 @@ class VGAETrainer(MMGNNTrainer):
         if self.pretrain is not True:
             max_num_nodes_in_graph = 22
             self.models['readout_aggregation'] = MLPAggregation(GNN_OUT_CHANNELS,2*GNN_OUT_CHANNELS,max_num_nodes_in_graph,num_layers=1)
-            self.models['classifier'] = GraphClassifier(1024,1, 2,self.models['readout_aggregation'], True,0.5).to(self.device)
+            self.models['classifier'] = MLPClassifier(2*GNN_OUT_CHANNELS,1, 2,self.models['readout_aggregation'], True,0.5).to(self.device)
             self.trainable_models = ['graph','classifier']
 
     
@@ -53,7 +52,7 @@ class VGAETrainer(MMGNNTrainer):
             g_data = g_data.to(self.device)
             
             z = self.models['graph'].encode(g_data.x, g_data.edge_index)
-            
+            print(z.shape)
             if self.pretrain is True:
             # Pretraining  
                 loss = self.models['graph'].loss(z, g_data)
@@ -144,7 +143,7 @@ class VGAETrainer(MMGNNTrainer):
 
                 test_loss += loss.item()
                 total += labels.size(0)
-
+        
         metrics = {
             "loss": test_loss/total,
             "auc": round(roc_auc_score(out_label_ids,proba),3),
@@ -156,24 +155,31 @@ class VGAETrainer(MMGNNTrainer):
         return metrics                       
     
     def save_checkpoint(self,epoch, metrics):
-        training_type = "classifier"
-        if self.pretrain:
-            training_type = "pretrain"
+        outpath = None
         try:
-            if metrics['auc'] > self.best_auc:
-                outpath = os.path.join('./checkpoints',self.model_name, "{}_{}_{}".format(training_type,metrics['auc'],metrics['avg_precision']))
+            if self.pretrain:
+                training_type = "pretrain"
+                if metrics['loss']<self.best_loss:
+                    outpath = os.path.join('./checkpoints',self.model_name, "{}_{}".format(training_type,metrics['loss']))
+                    self.best_loss = metrics['loss']
+            else:
+                training_type = "classifier"
+                if metrics['auc'] > self.best_auc:
+                    outpath = os.path.join('./checkpoints',self.model_name, "{}_{}_{}".format(training_type,metrics['auc'],metrics['avg_precision']))
+                    self.best_auc = metrics['auc']
+
+            if outpath:
                 if not os.path.exists(outpath):
                     os.makedirs(outpath)
-                
-                    print('Saving..')
-                    for name in self.trainable_models:
-                        savePath = os.path.join(outpath, "{}.pth".format(name))
-                        toSave = self.models[name].state_dict()
-                        torch.save(toSave, savePath)
-                    savePath = os.path.join(outpath, "{}.pth".format(self.optim.lower()))
-                    torch.save(self.optimizer.state_dict(), savePath)
-                    # self.best_acc = metrics['accuracy']
-                    self.best_auc = metrics['auc']
-                    print("best auc:", metrics['auc'],"avg_precision:",metrics['avg_precision'])
+                print('Saving..')
+                for name in self.models:
+                    savePath = os.path.join(outpath, "{}.pth".format(name))
+                    toSave = self.models[name].state_dict()
+                    torch.save(toSave, savePath)
+                savePath = os.path.join(outpath, "{}.pth".format(self.optim.lower()))
+                torch.save(self.optimizer.state_dict(), savePath)
+            
+                print("best metrics:", str(metrics))
+
         except Exception as e:
             print("Error:",e)

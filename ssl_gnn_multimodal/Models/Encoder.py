@@ -46,7 +46,8 @@ class ProjectionHead(nn.Module):
         self,
         embedding_dim,
         projection_dim=256,
-        dropout=0.1
+        dropout=0.1,
+        trainable=True
     ):
         super().__init__()
         self.projection = nn.Linear(embedding_dim, projection_dim)
@@ -54,6 +55,8 @@ class ProjectionHead(nn.Module):
         self.fc = nn.Linear(projection_dim, projection_dim)
         self.dropout = nn.Dropout(dropout)
         self.layer_norm = nn.LayerNorm(projection_dim)
+        for p in self.parameters():
+            p.requires_grad = trainable
     
     def forward(self, x):
         projected = self.projection(x)

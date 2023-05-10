@@ -20,18 +20,16 @@ import torch_geometric.transforms as T
 
 import numpy as np
 
-from config import PROJECTION_DIM
-
 class MMGNNTrainer(BaseTrainer):
-    def __init__(self, args) -> None:
-        super().__init__(args)
+    def __init__(self, config) -> None:
+        super().__init__(config)
 
         self.load_dataset()
         self.build_model()
         self.enable_multi_gpu()
         self.getTrainableParams()
         self.setup_optimizer_losses()
-        if args.resume:
+        if self.resume:
             self.load_checkpoint()
         self.imgfeatureModel = torchvision.models.detection.maskrcnn_resnet50_fpn(
             weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT,
@@ -40,6 +38,7 @@ class MMGNNTrainer(BaseTrainer):
 
     def build_model(self):
         # Model
+        PROJECTION_DIM = self.config['projection_dim']
         print('==> Building model..')
         self.models = {
             'image_encoder': ImageEncoder().to(self.device),
@@ -257,7 +256,7 @@ class MMGNNTrainer(BaseTrainer):
         try:
             # Load checkpoint.
             print('==> Resuming from checkpoint..')
-            checkpoint_dir = self.args.resume
+            checkpoint_dir = self.resume
             print(checkpoint_dir)
             assert os.path.isdir(checkpoint_dir), 'Error: no checkpoint directory found!'
 

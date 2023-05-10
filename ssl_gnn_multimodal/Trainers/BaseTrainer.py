@@ -5,9 +5,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
+import numpy as np
 
 import os
-
 import time
 from tqdm import tqdm
 from Dataset import load_dataset
@@ -15,20 +15,21 @@ from torch.utils.data import DataLoader
 from utils import get_device
 
 class BaseTrainer():
-    def __init__(self,args) -> None:
-        print(args)
-        self.args = args
-        self.model_name = self.args.model
-        self.lr = self.args.lr
-        self.optim = self.args.optim
-        self.num_workers = args.workers
-        self.epochs = self.args.epochs
-        self.batch_size = self.args.batchsize
-        self.dataset_name = self.args.dataset
-        self.data_path = self.args.data_path
-        self.pretrain = self.args.pretrain
+    def __init__(self,config) -> None:
+        self.config = config
+        self.model_name = config['model_name']
+        self.lr = config['lr']
+        self.optim = config['optimizer']
+        self.num_workers = config['workers']
+        self.epochs = config['epochs']
+        self.batch_size = config['batchsize']
+        self.dataset_name = config['dataset']
+        self.data_path = config['datapath']
+        self.pretrain = config['pretrain']
+        self.resume = config.get('resume')
         self.best_acc = 0
         self.best_auc = 0
+        self.best_loss = float("inf")
         self.trainable_models = []
         self.set_device()
         
@@ -41,7 +42,7 @@ class BaseTrainer():
 
     def set_device(self):
         self.n_gpus = 1
-        if self.args.cpu is not False:
+        if bool(self.config['cpu']) is not False:
             self.device = 'cpu'
         else:
             self.device , self.n_gpus = get_device()
@@ -68,25 +69,24 @@ class BaseTrainer():
 
     def setup_optimizer_losses(self):
         # self.criterion = nn.CrossEntropyLoss()
-        self.criterion = nn.BCEWithLogitsLoss()  #BCEWithLogitsLoss() #nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss()
         if self.optim=='SGD':
             self.optimizer = optim.SGD(self.trainableParameters, lr=self.lr,momentum=0.9, weight_decay=5e-4)
         elif self.optim=='SGDN':
             self.optimizer = optim.SGD(self.trainableParameters, lr=self.lr,momentum=0.9, weight_decay=5e-4,nesterov=True)
         else:
-            self.optimizer = eval("optim."+self.optim)(self.trainableParameters, lr=self.lr, weight_decay=5e-4)
+            self.optimizer = eval("optim."+self.optim)(self.trainableParameters, lr=self.lr, weight_decay=float(self.config['optim_weight_decay']))
         print("Optimizer:",self.optimizer) 
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=200)
+        if self.config['lr_scheduler']=="CosineLRDecay":
+            scheduler = lambda epoch :( 1 + np.cos((epoch) * np.pi / self.epochs) ) * 0.5
+            self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=scheduler)
+        elif self.config['lr_scheduler']=="CosineAnnealingLR":
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=200)
+
 
     def setTrain(self,model_keys=[]):
-        evalKeys = []
-        if model_keys is not None and len(model_keys)>0:
-            evalKeys = self.models.keys() - model_keys
         for key in model_keys:
             self.models[key].train()
-        
-        for key in evalKeys:
-            self.models[key].eval()
 
     def setEval(self):
         for model in self.models.values():
@@ -126,7 +126,7 @@ class BaseTrainer():
                 
                     print('Saving..')
                     print("Saved Model - Metrics",metrics)
-                    for name in self.trainable_models:
+                    for name in self.models:
                         savePath = os.path.join(outpath, "{}.pth".format(name))
                         toSave = self.models[name].state_dict()
                         torch.save(toSave, savePath)

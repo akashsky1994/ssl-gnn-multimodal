@@ -1,6 +1,8 @@
 import os
 import json
 import torch
+from torch.nn.utils.rnn import pad_sequence
+
 from PIL import Image
 from glob import glob
 from pathlib import Path
@@ -21,14 +23,16 @@ class ConceptualCaptionDataset(torch.utils.data.Dataset):
         image = Image.open(self.data[index]).convert("RGB")
         text_file_path = self.data[index].replace("jpg","txt")
         text = Path(text_file_path).read_text().replace('\n','')
-        
-        return image, text, -1
+        img_feat_path = self.data[index].replace("jpg","pt")
+        image_features = torch.load(img_feat_path)
+        return image, text, -1,image_features
     
     def collate_fn(self,batch):
         # Image Tensor
         tensor_img = torch.stack(
             [self.image_transform(row[0]) for row in batch]
         )
+        img_feats = pad_sequence([row[3] for row in batch],batch_first=True)
 
         # Tokenized Text Tensor 
         encoded_queries = self.tokenizer([row[1] for row in batch])
@@ -45,4 +49,4 @@ class ConceptualCaptionDataset(torch.utils.data.Dataset):
         #Label Tensor
         label_tensor = torch.stack([torch.tensor([row[2]],dtype=torch.float32) for row in batch])
 
-        return tensor_img,text_tensor,attention_mask,label_tensor
+        return tensor_img,img_feats,text_tensor,attention_mask,label_tensor

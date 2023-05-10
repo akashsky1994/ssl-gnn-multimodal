@@ -48,7 +48,7 @@ class DeepVGAE(VGAE):
         return adj_pred
     
     def loss(self,z,g_data):
-        return self.recon_loss(z,g_data.edge_index) + (1 / g_data.num_nodes) * self.kl_loss()
+        return self.recon_loss(z,g_data.edge_index) + ((1 / g_data.num_nodes) * self.kl_loss())
     
     def metrics(self,z,g_data):
         neg_edge_index = negative_sampling(g_data.edge_index, z.size(0))
