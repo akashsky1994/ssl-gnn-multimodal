@@ -3,7 +3,7 @@ import torch
 from torch.nn import Linear
 import torch.nn.functional as F
 
-from torch_geometric.nn import GATv2Conv,global_mean_pool
+from torch_geometric.nn import GATv2Conv,SuperGATConv, global_mean_pool
 from torch_geometric.nn.models import GAT #TODO
 from torch_geometric.nn.models.jumping_knowledge import JumpingKnowledge
 
@@ -39,57 +39,99 @@ class GATClassifier(torch.nn.Module):
         return out,x    #,F.log_softmax(x, dim=1)
     
 
-class DeepGAT(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels,num_layers,in_heads,out_heads,norm_type="graph_norm",activation_type="prelu",dropout=0.3,jk="lstm"):
-        super(DeepGAT, self).__init__()
+class DeepGNN(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels,num_layers,nheads,norm_type="graph_norm",activation_type="prelu",dropout=0.3,jk=None,last_layer=True,**kwargs):
+        super(DeepGNN, self).__init__()
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
         self.num_layers = num_layers
-        self.in_head = in_heads
-        self.out_heads = out_heads
+        self.nheads = nheads
         self.dropout = dropout
 
         normFn = get_normalization(norm_type)
         activation = get_activation(activation_type)
-        self.gat_layers = torch.nn.ModuleList()
+        self.gnn_layers = torch.nn.ModuleList()
         self.norms = torch.nn.ModuleList()
         self.acts = torch.nn.ModuleList()
+        last_norm = torch.nn.Identity()
+        last_act = torch.nn.Identity()
+        if last_layer is True:
+            last_norm = normFn(out_channels)
+            last_act = activation
         if num_layers == 1:
-            self.gat_layers.append(GATv2Conv(in_channels, out_channels,out_heads,dropout=dropout))
-            self.norms.append(torch.nn.Identity())
-            self.acts.append(torch.nn.Identity())
+            
+            self.gnn_layers.append(self.init_convs(in_channels, out_channels,nheads,dropout,concat=False,**kwargs))
+            self.norms.append(last_norm)
+            self.acts.append(last_act)
         else:
             # input projection
-            self.gat_layers.append(GATv2Conv(in_channels, hidden_channels,in_heads,dropout=dropout))
-            self.norms.append(normFn(hidden_channels*in_heads))
+
+            self.gnn_layers.append(self.init_convs(in_channels, (hidden_channels//nheads),nheads,dropout,**kwargs))
+            self.norms.append(normFn(hidden_channels))
             self.acts.append(activation)
             # hidden layers
             for l in range(1, num_layers - 1):
                 # due to multi-head, the in_dim = num_hidden * num_heads
-                self.gat_layers.append(GATv2Conv(hidden_channels*in_heads, hidden_channels,in_heads,dropout=dropout))
-                self.norms.append(normFn(hidden_channels*in_heads))
+                self.gnn_layers.append(self.init_convs(hidden_channels, (hidden_channels//nheads),nheads,dropout,**kwargs))
+                self.norms.append(normFn(hidden_channels))
+                self.acts.append(activation)
+            
+            # output projection
+            if jk is not None and isinstance(jk, str):
+                self.jkmode = jk
+
+                self.gnn_layers.append(self.init_convs(hidden_channels, (hidden_channels//nheads),nheads,dropout,**kwargs))
+                self.norms.append(normFn(hidden_channels))
                 self.acts.append(activation)
 
-            # output projection
-            self.gat_layers.append(GATv2Conv(hidden_channels*in_heads, out_channels,out_heads,dropout=dropout))
-            self.norms.append(torch.nn.Identity())
-            self.acts.append(torch.nn.Identity())
-
-        # self.jk = JumpingKnowledge(jk, hidden_channels, num_layers)
+                self.jk = JumpingKnowledge(jk,hidden_channels,num_layers) #TODO:REVIEW
+                in_channels_lin = hidden_channels
+                if self.jkmode == 'cat':
+                    in_channels_lin = num_layers * hidden_channels
+                self.lin = Linear(in_channels_lin, out_channels)
+            else:            
+                self.gnn_layers.append(self.init_convs(hidden_channels, out_channels,nheads,dropout,concat=False,**kwargs))
+                self.norms.append(last_norm)
+                self.acts.append(last_act)
+            
         self.head = torch.nn.Identity()
 
     def forward(self, x, edge_index, return_hidden=False,sigmoid: bool = False):
         h = x
         hidden_list = []
-        for i, (gat_layer, norm, act) in enumerate(zip(self.gat_layers, self.norms,self.acts)):
+        for i, (gnn_layer, norm, act) in enumerate(zip(self.gnn_layers, self.norms,self.acts)):
             h = F.dropout(h, p=self.dropout, training=self.training)
-            h = act(norm(gat_layer(h,edge_index)))
+            h = act(norm(gnn_layer(h,edge_index)))
             hidden_list.append(h)
         
         # output projection
+        h = self.lin(self.jk(hidden_list)) if hasattr(self, 'jk') else h
         h = torch.sigmoid(self.head(h)) if sigmoid else self.head(h)
         if return_hidden:
             return h, hidden_list
         else:
             return h
+        
+    def get_loss(self):
+        return None
+        
+
+class DeepGAT(DeepGNN):
+    def init_convs(self,in_channels,out_channels,nheads,dropout,concat=True,**kwargs):
+        return GATv2Conv(in_channels, out_channels,nheads,concat=concat,dropout=dropout)
+    
+
+class DeepSuperGAT(DeepGNN):
+    def init_convs(self,in_channels,out_channels,nheads,dropout,concat=True,**kwargs):
+        attention_type = kwargs.pop('attention_type', 'MX')
+        edge_sample_ratio = kwargs.pop('edge_sample_ratio', 0.8)
+        is_undirected = kwargs.pop('is_undirected', True)
+        return SuperGATConv(in_channels, out_channels,nheads,concat=concat,dropout=dropout,attention_type=attention_type,edge_sample_ratio=edge_sample_ratio,is_undirected=is_undirected)
+    
+    def get_loss(self):
+        att_loss = 0
+        for i in range(self.num_layers):
+            att_loss += self.gnn_layers[i].get_attention_loss()
+
+        return att_loss

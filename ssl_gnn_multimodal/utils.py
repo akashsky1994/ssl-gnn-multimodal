@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Module
 from torch_geometric.nn import BatchNorm,GraphNorm
+from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
+
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.svm import SVC
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, average_precision_score
@@ -72,3 +74,15 @@ def evaluate_graph_embeddings_using_svm(embeddings, labels):
     }
 
     return metrics
+
+def graph_emb_pooling(pooler,enc_rep,g_data):
+    if pooler == "mean":
+        graph_emb = global_mean_pool(enc_rep, g_data.batch)
+    elif pooler == "max":
+        graph_emb = global_max_pool(enc_rep, g_data.batch)
+    elif pooler == "sum":
+        graph_emb = global_add_pool(enc_rep, g_data.batch)
+    else:
+        raise NotImplementedError
+    
+    return graph_emb

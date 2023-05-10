@@ -25,6 +25,7 @@ class MLPClassifier(torch.nn.Module):
             in_channels = out_channels
 
         self.reset_parameters()
+        self.criterion = torch.nn.BCEWithLogitsLoss()
 
     def reset_parameters(self):
         for lin, batch_norm in zip(self.lins, self.batch_norms):
@@ -54,3 +55,4 @@ class MLPClassifier(torch.nn.Module):
         out_label_ids = labels.detach().cpu().numpy()
         
         return roc_auc_score(out_label_ids,proba),average_precision_score(out_label_ids,preds),f1_score(out_label_ids, preds, average="micro"),accuracy_score(out_label_ids, preds)
+    

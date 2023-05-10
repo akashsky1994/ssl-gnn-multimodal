@@ -1,11 +1,10 @@
 
 from Models.GAT import GATClassifier
 from Trainers import MMGNNTrainer
-from config import PROJECTION_DIM
 
 class MMGATTrainer(MMGNNTrainer):
-    def __init__(self, args) -> None:
-        super().__init__(args)
+    def __init__(self, config) -> None:
+        super().__init__(config)
 
         self.build_model()
         self.getTrainableParams()
@@ -13,4 +12,5 @@ class MMGATTrainer(MMGNNTrainer):
 
     def build_model(self):
         super().build_model()
+        PROJECTION_DIM = self.config['projection_dim']
         self.models['graph'] = GATClassifier(PROJECTION_DIM,num_classes=1).to(self.device)

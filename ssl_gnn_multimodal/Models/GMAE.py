@@ -8,7 +8,7 @@ from functools import partial
 from itertools import chain
 
 from torch_geometric.nn.models import GAE
-from torch_geometric.utils import dropout_edge, add_self_loops, remove_self_loops
+from torch_geometric.utils import dropout_edge, add_self_loops, remove_self_loops,negative_sampling
 
 class GMAE(GAE):
     def __init__(self, encoder: Module, decoder: Optional[Module] = None, mask_rate=0.3,replace_rate=0.1,concat_hidden=False,loss_fn="sce"):

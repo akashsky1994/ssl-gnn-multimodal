@@ -14,15 +14,14 @@ import torch_geometric.transforms as T
 from torch_geometric.data import Data as GraphData
 from torch_geometric.loader import DataLoader as GDataLoader
 
-from config import PROJECTION_DIM,GNN_OUT_CHANNELS
-
-
 class VGAETrainer(MMGNNTrainer):
-    def __init__(self, args) -> None:
-        super().__init__(args)
+    def __init__(self, config) -> None:
+        super().__init__(config)
         print("Trainable Models",self.trainable_models)
 
     def build_model(self):
+        GNN_OUT_CHANNELS = self.config['gnn_out_channels']
+        PROJECTION_DIM = self.config['projection_dim']
         super().build_model()
         self.trainable_models = ['image_encoder','text_encoder','image_projection','text_projection','graph']
         self.models['gnn_encoder'] = GATVGAEEncoder(PROJECTION_DIM,2*GNN_OUT_CHANNELS,GNN_OUT_CHANNELS,4,0.3)
@@ -173,7 +172,7 @@ class VGAETrainer(MMGNNTrainer):
                 if not os.path.exists(outpath):
                     os.makedirs(outpath)
                 print('Saving..')
-                for name in self.trainable_models:
+                for name in self.models:
                     savePath = os.path.join(outpath, "{}.pth".format(name))
                     toSave = self.models[name].state_dict()
                     torch.save(toSave, savePath)
