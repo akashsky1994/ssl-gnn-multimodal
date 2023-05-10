@@ -21,12 +21,12 @@ def load_dataset(dataset_name,data_path,image_transform=None,tokenizer=None):
         # tokenizer = AutoTokenizer.from_pretrained(model_name, do_lower_case=True)
         tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
-    if dataset_name=="HatefulMeme":
+    if dataset_name=="HATEFULMEME":
         train_dataset = HatefulMemeDataset(data_path,'train',image_transform,tokenizer)
         dev_dataset = HatefulMemeDataset(data_path,'dev',image_transform,tokenizer)
         test_dataset = HatefulMemeDataset(data_path,'test',image_transform,tokenizer)
         collate_fn = train_dataset.collate_fn
-    elif dataset_name=="ConceptualCaption":
+    elif dataset_name=="CONCEPTUALCAPTION":
         dataset = ConceptualCaptionDataset(data_path,image_transform,tokenizer)
         n_dataset = len(dataset)
         n_dev = math.ceil(len(dataset)*0.05)
