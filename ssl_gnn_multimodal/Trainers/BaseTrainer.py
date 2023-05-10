@@ -101,14 +101,15 @@ class BaseTrainer():
             
             for epoch in tqdm(range(self.epochs)):
                 self.train_epoch(epoch)
-                metrics = self.evaluate(epoch,'Validation', self.dev_loader)
+                metrics = self.evaluate(epoch, self.dev_loader)
                 self.scheduler.step()
                 self.save_checkpoint(epoch,metrics)
                 print('*' * 89)
         except KeyboardInterrupt:
             print('-' * 89)
             print('Exiting from training early')
-        unseen_metrics = self.evaluate(epoch, 'Testing', self.test_loader)
+        print("Testing")
+        unseen_metrics = self.evaluate(epoch, self.test_loader)
         print(unseen_metrics)
              
     def train_epoch(self,epoch):

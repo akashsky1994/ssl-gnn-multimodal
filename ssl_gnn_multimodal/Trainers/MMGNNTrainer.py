@@ -107,7 +107,7 @@ class MMGNNTrainer(BaseTrainer):
         print("Training --- Epoch : {} | Accuracy : {} | Loss : {} | AUC : {}".format(epoch,metrics['accuracy'],metrics['loss'],metrics['auc']))    
         return metrics
 
-    def evaluate(self, epoch, data_type, data_loader):
+    def evaluate(self, epoch, data_loader):
         self.setEval()
         test_loss = 0
         total = 0
@@ -155,7 +155,7 @@ class MMGNNTrainer(BaseTrainer):
             "micro_f1": round(f1_score(out_label_ids, preds, average="micro"),3),
             "prediction": preds
         }
-        print("{} --- Epoch : {} | Accuracy : {} | Loss : {} | AUC : {}".format(data_type, epoch,result['accuracy'],result['loss'],result['auc']))    
+        print("Evaluation --- Epoch : {} | Accuracy : {} | Loss : {} | AUC : {}".format(epoch,result['accuracy'],result['loss'],result['auc']))    
         return result
 
     def get_image_feature_embeddings(self,imgTensors):

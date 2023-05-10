@@ -80,7 +80,7 @@ class GMAETrainer(MMGNNTrainer):
         print("Training --- Epoch : {} | Loss : {}".format(epoch,train_loss/total))
         return epoch,train_loss/total
 
-    def evaluate(self, epoch, data_type, data_loader):
+    def evaluate(self, epoch, data_loader):
         self.setEval()
         test_loss = 0
         total = 0
@@ -102,7 +102,11 @@ class GMAETrainer(MMGNNTrainer):
                 if self.pretrain is True:
                 #pretraining
                     # graph_emb = graph_emb_pooling("mean",enc_rep,g_data)
-                    loss,_ = self.models['graph'](g_data.x,g_data.edge_index)
+                    recon_loss,_ = self.models['graph'](g_data.x,g_data.edge_index)
+                    encoder_loss = self.models['graph'].encoder.get_loss()
+                    loss = recon_loss
+                    if encoder_loss is not None:
+                        loss = self.config['recon_loss_coef']*recon_loss + self.config['encoder_loss_coef']*encoder_loss
                 else:
                 # hateful classification
                     enc_rep = self.models['graph'].encoder(g_data.x, g_data.edge_index)
@@ -134,7 +138,7 @@ class GMAETrainer(MMGNNTrainer):
             }
             metrics = {**metrics,**evaluate_metrics}
 
-        print("{} --- Epoch : {}".format(data_type,epoch),str(metrics))  
+        print("Evaluation --- Epoch : {}".format(epoch),str(metrics))  
         # if self.pretrain is True:
         #     graph_emb_metrics = evaluate_graph_embeddings_using_svm(graph_embs,out_label_ids)  
         #     print("Graph Embedding SVC Metrics:", str(graph_emb_metrics))
