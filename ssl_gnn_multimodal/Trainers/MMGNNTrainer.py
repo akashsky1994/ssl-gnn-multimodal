@@ -1,6 +1,6 @@
 import os
 import torch
-# import torch.backends.cudnn as cudnn
+import torch.backends.cudnn as cudnn
 import torchvision
 from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights,MaskRCNN_ResNet50_FPN_V2_Weights
 from torchvision.models.resnet import ResNet50_Weights
@@ -15,7 +15,7 @@ from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
 import numpy as np
 from torch_geometric.data import HeteroData,Data as GraphData,Batch
 from torch_geometric.loader import DataLoader as GDataLoader,DataListLoader
-from torch_geometric.nn import to_hetero,DataParallel
+from torch_geometric.nn import to_hetero,DataParallel as GDataParallel
 import torch_geometric.transforms as T
 
 import numpy as np
@@ -26,15 +26,26 @@ class MMGNNTrainer(BaseTrainer):
 
         self.load_dataset()
         self.build_model()
-        self.enable_multi_gpu()
+        
         self.getTrainableParams()
         self.setup_optimizer_losses()
         if self.resume:
             self.load_checkpoint()
+        self.enable_multi_gpu()
         self.imgfeatureModel = torchvision.models.detection.maskrcnn_resnet50_fpn(
             weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT,
             weights_backbone=ResNet50_Weights.DEFAULT
         ).to(self.device).eval()
+        
+
+    def enable_multi_gpu(self):
+        if self.device in ['cuda','mps'] and self.n_gpus>1:
+            for key in self.trainable_models:
+                if key!='graph':
+                    self.models[key] = torch.nn.DataParallel(self.models[key])
+                else:
+                    self.models[key] = GDataParallel(self.models[key])
+            cudnn.benchmark = True
 
     def build_model(self):
         # Model
@@ -208,7 +219,7 @@ class MMGNNTrainer(BaseTrainer):
         return embeddings,batch_mapping
     
     def generate_subgraph_v2(self,image_embeddings,image_feat_data,text_embeddings,labels):
-        data_list = []
+        graph_list = []
         image_feat_embeddings, batch_mapping = image_feat_data
         j,k= 0,0
         for i in range(len(image_embeddings)):
@@ -225,11 +236,16 @@ class MMGNNTrainer(BaseTrainer):
             data.y = labels[i]
             data = T.ToUndirected()(data)
             data = T.NormalizeFeatures()(data)
-            data_list.append(data)
+            graph_list.append(data)
         
-        loader = GDataLoader(data_list, batch_size=self.batch_size*self.n_gpus)
-        # return Batch().from_data_list(data_list)
-        return loader
+        if self.n_gpus>1:
+            g_loader = DataListLoader(graph_list,batch_size=self.batch_size*self.n_gpus,shuffle=True)
+            batched_graph = next(iter(g_loader))
+        else:
+            batched_graph = Batch.from_data_list(graph_list)
+            batched_graph = batched_graph.to(self.device)
+        
+        return batched_graph
 
     def generate_subgraph(self,image_embeddings,image_feat_embeddings,text_embeddings,labels):
         data_list = []

@@ -19,6 +19,7 @@ def get_device():
         device = 'mps'
     else:
         device = 'cpu'
+    print("Devices:", device,n_gpus)
     return device,n_gpus
 
 def get_normalization(norm_type) -> Module:

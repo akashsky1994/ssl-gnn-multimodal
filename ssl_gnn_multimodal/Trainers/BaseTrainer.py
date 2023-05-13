@@ -46,16 +46,7 @@ class BaseTrainer():
             self.device = 'cpu'
         else:
             self.device , self.n_gpus = get_device()
-        print(self.device)
 
-    def enable_multi_gpu(self):
-        if self.device in ['cuda','mps'] and self.n_gpus>1:
-            for key in self.trainable_models:
-                if key!='graph':
-                    self.models[key] = torch.nn.DataParallel(self.models[key])
-                # else:
-                #     self.models[key] = DataParallel(self.models[key])
-                # cudnn.benchmark = True
 
     def load_dataset(self):
         train_dataset,dev_dataset,test_dataset,collate_fn = load_dataset(self.dataset_name,self.data_path) 
