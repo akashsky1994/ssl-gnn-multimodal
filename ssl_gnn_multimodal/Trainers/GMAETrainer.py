@@ -18,7 +18,7 @@ class GMAETrainer(MMGNNTrainer):
         super().__init__(config)
         if self.pretrain is not True: # finetuning 1/10 of pretrain lr 
             self.lr = self.lr*1e-1
-        print("Trainable Models",self.trainable_models)
+        print("Trainable Models:",self.trainable_models)
 
     def build_model(self):
         GNN_OUT_CHANNELS = self.config['gnn_out_channels']
