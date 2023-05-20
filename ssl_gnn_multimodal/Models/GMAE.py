@@ -58,8 +58,8 @@ class GMAE(GAE):
         mask_nodes = perm[: num_mask_nodes]
         keep_nodes = perm[num_mask_nodes: ]
 
-        if self._replace_rate > 0:
-            num_noise_nodes = int(self._replace_rate * num_mask_nodes)
+        num_noise_nodes = int(self._replace_rate * num_mask_nodes)
+        if self._replace_rate > 0 and num_noise_nodes>0:
             perm_mask = torch.randperm(num_mask_nodes, device=x.device)
             token_nodes = mask_nodes[perm_mask[: int(self._mask_token_rate * num_mask_nodes)]]
             noise_nodes = mask_nodes[perm_mask[-int(self._replace_rate * num_mask_nodes):]]
@@ -111,12 +111,19 @@ class GMAE(GAE):
         loss = self.criterion(x_rec, x_init)
         return loss
 
-    def forward(self, x, edge_index):
+    def forward(self, g_data):
+        x, edge_index = g_data.x,g_data.edge_index
         # ---- attribute reconstruction ----
         loss = self.mask_attr_prediction(x, edge_index)
-        loss_item = {"loss": loss.item()}
-        return loss, loss_item
-
+        encoder_loss = self.encoder.get_loss()
+        # loss_item = {"loss": loss.item()}
+        return loss,encoder_loss
+    
+    def embed(self, g_data):
+        x, edge_index = g_data.x,g_data.edge_index
+        rep = self.encoder(x, edge_index)
+        return rep
+    
     @property
     def enc_params(self):
         return self.encoder.parameters()

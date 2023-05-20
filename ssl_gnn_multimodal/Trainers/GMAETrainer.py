@@ -54,21 +54,19 @@ class GMAETrainer(MMGNNTrainer):
             text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
             image_feat_data = self.get_image_feature_embeddings_v2(image_features)
             image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-            g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
-            
-            g_data = next(iter(g_data_loader))
-            g_data = g_data.to(self.device)
+            g_data = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
+                   
             if self.pretrain is True:
-                recon_loss,_ = self.models['graph'](g_data.x,g_data.edge_index)
-                encoder_loss = self.models['graph'].encoder.get_loss()
-                loss = recon_loss
+                recon_loss,encoder_loss = self.models['graph'](g_data)
+                loss = recon_loss.sum()
                 if encoder_loss is not None:
-                    loss = self.config['recon_loss_coef']*recon_loss + self.config['encoder_loss_coef']*encoder_loss
+                    loss = self.config.get('recon_loss_coef',1.0)*loss + self.config.get('encoder_loss_coef',4.0)*(encoder_loss.sum())
             else:
                 # hateful classification
-                enc_rep = self.models['graph'].encoder(g_data.x,g_data.edge_index)
+                y = g_data.y.to(self.device)
+                enc_rep = self.models['graph'].embed(g_data)
                 output = self.models['classifier'](enc_rep,g_data)
-                loss = self.models['classifier'].criterion(output, g_data.y)
+                loss = self.models['classifier'].criterion(output, y)
                 
             loss.backward()
             self.optimizer.step()
@@ -80,7 +78,7 @@ class GMAETrainer(MMGNNTrainer):
         print("Training --- Epoch : {} | Loss : {}".format(epoch,train_loss/total))
         return epoch,train_loss/total
 
-    def evaluate(self, epoch, data_type, data_loader):
+    def evaluate(self, epoch, data_loader):
         self.setEval()
         test_loss = 0
         total = 0
@@ -94,20 +92,20 @@ class GMAETrainer(MMGNNTrainer):
                 text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
                 image_feat_data = self.get_image_feature_embeddings_v2(image_features)
                 image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-                g_data_loader = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
+                g_data = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
                 
-                g_data = next(iter(g_data_loader))
-                g_data = g_data.to(self.device)
-                
-                if self.pretrain is True:
-                #pretraining
+                if self.pretrain is True: #pretraining
                     # graph_emb = graph_emb_pooling("mean",enc_rep,g_data)
-                    loss,_ = self.models['graph'](g_data.x,g_data.edge_index)
-                else:
-                # hateful classification
-                    enc_rep = self.models['graph'].encoder(g_data.x, g_data.edge_index)
+                    recon_loss,encoder_loss = self.models['graph'](g_data)
+                    loss = recon_loss.sum()
+                    if encoder_loss is not None:
+                        loss = self.config.get('recon_loss_coef',1.0)*loss + self.config.get('encoder_loss_coef',4.0)*(encoder_loss.sum())
+
+                else: # hateful classification
+                    y = g_data.y.to(self.device)
+                    enc_rep = self.models['graph'].embed(g_data)
                     output = self.models['classifier'](enc_rep,g_data)
-                    loss = self.criterion(output, g_data.y)
+                    loss = self.criterion(output, y)
                     if out_label_ids is None:
                         out_label_ids = labels.detach().cpu().numpy()
                     else:
@@ -134,7 +132,7 @@ class GMAETrainer(MMGNNTrainer):
             }
             metrics = {**metrics,**evaluate_metrics}
 
-        print("{} --- Epoch : {}".format(data_type,epoch),str(metrics))  
+        print("Evaluation --- Epoch : {}".format(epoch),str(metrics))  
         # if self.pretrain is True:
         #     graph_emb_metrics = evaluate_graph_embeddings_using_svm(graph_embs,out_label_ids)  
         #     print("Graph Embedding SVC Metrics:", str(graph_emb_metrics))

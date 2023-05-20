@@ -71,7 +71,7 @@ class VGAETrainer(MMGNNTrainer):
         print("Training --- Epoch : {} | Loss : {}".format(epoch,train_loss/total))    
         return epoch,train_loss/total
     
-    def evaluate(self, epoch, data_type, data_loader):
+    def evaluate(self, epoch, data_loader):
         self.setEval()
         test_loss = 0
         total = 0
@@ -151,7 +151,7 @@ class VGAETrainer(MMGNNTrainer):
             "accuracy":round(accuracy_score(out_label_ids, preds),3),
             "micro_f1":round(f1_score(out_label_ids, preds, average="micro"),3)
         }
-        print("{} --- Epoch : {} | roc_auc_score : {} | average_precision_score : {} | accuracy : {} | micro_f1 : {}".format(data_type,epoch,metrics['auc'],metrics['avg_precision'],metrics['accuracy'],metrics['micro_f1']))    
+        print("Evaluation --- Epoch : {} | roc_auc_score : {} | average_precision_score : {} | accuracy : {} | micro_f1 : {}".format(epoch,metrics['auc'],metrics['avg_precision'],metrics['accuracy'],metrics['micro_f1']))    
         return metrics                       
     
     def save_checkpoint(self,epoch, metrics):

@@ -46,16 +46,7 @@ class BaseTrainer():
             self.device = 'cpu'
         else:
             self.device , self.n_gpus = get_device()
-        print(self.device)
 
-    def enable_multi_gpu(self):
-        if self.device in ['cuda','mps'] and self.n_gpus>1:
-            for key in self.trainable_models:
-                if key!='graph':
-                    self.models[key] = torch.nn.DataParallel(self.models[key])
-                # else:
-                #     self.models[key] = DataParallel(self.models[key])
-                # cudnn.benchmark = True
 
     def load_dataset(self):
         train_dataset,dev_dataset,test_dataset,collate_fn = load_dataset(self.dataset_name,self.data_path) 
@@ -101,14 +92,15 @@ class BaseTrainer():
             
             for epoch in tqdm(range(self.epochs)):
                 self.train_epoch(epoch)
-                metrics = self.evaluate(epoch,'Validation', self.dev_loader)
+                metrics = self.evaluate(epoch, self.dev_loader)
                 self.scheduler.step()
                 self.save_checkpoint(epoch,metrics)
                 print('*' * 89)
         except KeyboardInterrupt:
             print('-' * 89)
             print('Exiting from training early')
-        unseen_metrics = self.evaluate(epoch, 'Testing', self.test_loader)
+        print("Testing")
+        unseen_metrics = self.evaluate(epoch, self.test_loader)
         print(unseen_metrics)
              
     def train_epoch(self,epoch):
