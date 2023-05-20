@@ -43,6 +43,6 @@ Graph Models Available:
 |Multimodal GNN|SAGE| 0.481| 0.62| -->
 
 
-### High Performance Optimization and Benchmark
+<!-- ### High Performance Optimization and Benchmark
 
-Performance Benchmark details and script can be found in the `benchmarks/performance-hpc/`
+Performance Benchmark details and script can be found in the `benchmarks/performance-hpc/` -->
