@@ -15,14 +15,6 @@ conda activate ssl-gnn-env
 
 cd /scratch/am11533/ssl-gnn-multimodal
 
-# python main.py --batchsize 16 --epochs 20 --optim Adam --model MMSAGE --workers 4 --lr 0.01
+python ssl_gnn_multimodal/main.py --model GMAE --dataset HATEFULMEME --data_path ../datasets/hateful_memes/  --resume ./checkpoints/GMAE/pretrain/
 
-# python ssl_gnn_multimodal/main.py --batchsize 16 --epochs 20 --optim Adam --model VGAE_UNSUPERVISED --workers 4 --lr 0.01 --data_path ../datasets/hateful_memes/
-
-python ssl_gnn_multimodal/main.py --batchsize 16 --epochs 20 --optim Adam --model MLP_EMBED_CLASSIFIER --workers 4 --lr 0.01 --data_path ../datasets/hateful_memes/  --resume ./checkpoints/VGAE_UNSUPERVISED/0.8395604682843558_0.7575308748579077/
-
-# nohup python -u ssl_gnn_multimodal/main.py --batchsize 16 --epochs 20 --optim Adam --model MLP_EMBED_CLASSIFIER --workers 4 --lr 0.01 --data_path ../datasets/hateful_memes/  --resume ./checkpoints/VGAE_v2 > output_ar.log &
-
-# nohup python -u ssl_gnn_multimodal/main.py --batchsize 16 --epochs 20 --optim Adam --model MLP_EMBED_CLASSIFIER --workers 4 --lr 0.01 --data_path ../datasets/hateful_memes/  --resume ./checkpoints/VGAE_UNSUPERVISED/0.8395604682843558_0.7575308748579077/ > output_vgae_gat.log &
-
-# ``nohup python -u ssl_gnn_multimodal/main.py --batchsize 16 --epochs 20 --optim Adam --model GMAE --workers 4 --lr 0.01 --data_path ../datasets/hateful_memes/ --dataset HatefulMeme > output_gmae_pretrain_$(date +%s).log &``
+# ``nohup python -u ssl_gnn_multimodal/main.py --model GMAE --data_path ../datasets/hateful_memes/  --resume ./checkpoints/GMAE/pretrain/ > output_gmae_pretrain_$(date +%s).log &``
