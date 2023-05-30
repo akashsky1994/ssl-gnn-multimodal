@@ -10,3 +10,10 @@ pip install transformers --force-reinstall
 
 pip install timm transformers datasets
 pip install torch_geometric
+
+
+
+# NYU HPC ENVIRONMENT ENABLE
+source ~/.bashrc
+cd /scratch/am11533/ssl-gnn-multimodal
+conda activate ssl-gnn-env
