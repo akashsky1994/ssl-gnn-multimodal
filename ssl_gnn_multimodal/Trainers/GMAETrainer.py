@@ -5,10 +5,10 @@ import numpy as np
 from torch_geometric.nn import MLPAggregation
 
 from Trainers import MMGNNTrainer
-from Models.Encoder import ImageEncoder,TextEncoder,ProjectionHead
 from Models.GMAE import GMAE
 from Models.GAT import DeepGAT
 from Models.MLPClassifier import MLPClassifier
+from Models.GraphLearn import GraphLearn
 
 from utils import evaluate_graph_embeddings_using_svm,graph_emb_pooling
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, average_precision_score
@@ -25,16 +25,16 @@ class GMAETrainer(MMGNNTrainer):
         PROJECTION_DIM = self.config['projection_dim']
         # Model
         print('==> Building model..')
-        self.models = {
-            'image_encoder': ImageEncoder(trainable=self.pretrain).to(self.device),
-            'text_encoder': TextEncoder(trainable=self.pretrain).to(self.device),
-            'image_projection': ProjectionHead(2048,PROJECTION_DIM,trainable=self.pretrain).to(self.device),
-            'text_projection': ProjectionHead(768,PROJECTION_DIM,trainable=self.pretrain).to(self.device)
-        }
+
         graph_encoder = DeepGAT(in_channels=PROJECTION_DIM,hidden_channels=2*GNN_OUT_CHANNELS,out_channels=GNN_OUT_CHANNELS,num_layers=3,nheads=4,last_layer=True,jk=self.config.get('jk'),norm_type="graph_norm",activation_type="prelu",dropout=0.3).to(self.device)
         graph_decoder = DeepGAT(in_channels=GNN_OUT_CHANNELS,hidden_channels=GNN_OUT_CHANNELS,out_channels=PROJECTION_DIM,num_layers=1,nheads=4,last_layer=False,norm_type="graph_norm",activation_type="prelu",dropout=0.3).to(self.device)
-        self.models['graph'] = GMAE(graph_encoder,graph_decoder).to(self.device)
-        self.trainable_models = ['image_encoder','text_encoder','image_projection','text_projection','graph']
+        self.models = {
+            'graph_learning':GraphLearn(PROJECTION_DIM,trainable=self.pretrain).to(self.device),
+            'graph':GMAE(graph_encoder,graph_decoder).to(self.device),
+            'classifier':None
+        }
+        
+        self.trainable_models = ['graph_learning','graph']
         
         if self.pretrain is not True:
             max_num_nodes_in_graph = 22
@@ -51,12 +51,12 @@ class GMAETrainer(MMGNNTrainer):
             images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
             self.optimizer.zero_grad()
-            text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-            image_feat_data = self.get_image_feature_embeddings_v2(image_features)
-            image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-            g_data = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
+            
+            # Graph Learning/Alignment Module
+            g_data = self.models['graph_learning'](images,image_features,tokenized_text,attention_masks,labels)
                    
             if self.pretrain is True:
+                # Graph Autoencoder Self-Supervised Learning
                 recon_loss,encoder_loss = self.models['graph'](g_data)
                 loss = recon_loss.sum()
                 if encoder_loss is not None:
@@ -89,10 +89,8 @@ class GMAETrainer(MMGNNTrainer):
             for images, image_features, tokenized_text, attention_masks, labels in data_loader:
                 images, image_features, tokenized_text, attention_masks, labels = images.to(self.device), image_features.to(self.device), tokenized_text.to(self.device), attention_masks.to(self.device), labels.to(self.device)
             
-                text_embeddings = self.models['text_projection'](self.models['text_encoder'](input_ids=tokenized_text, attention_mask=attention_masks))
-                image_feat_data = self.get_image_feature_embeddings_v2(image_features)
-                image_embeddings = self.models['image_projection'](self.models['image_encoder'](images))
-                g_data = self.generate_subgraph_v2(image_embeddings,image_feat_data,text_embeddings,labels)
+                # Graph Learning/Alignment Module
+                g_data = self.models['graph_learning'](images,image_features,tokenized_text,attention_masks,labels)
                 
                 if self.pretrain is True: #pretraining
                     # graph_emb = graph_emb_pooling("mean",enc_rep,g_data)
