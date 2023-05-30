@@ -41,7 +41,6 @@ There has been a sharp increase in the number of people using social media recen
     │   ├── GMAE.py
     │   ├── GraphLearn.py
     │   ├── HeteroGNN.py
-    │   ├── LanguageAndVisionConcat.py
     │   ├── MLPClassifier.py
     │   └── SAGE.py
     ├── sbatch
@@ -57,11 +56,11 @@ There has been a sharp increase in the number of people using social media recen
     └── utils.py
 ```
 ### Dataset
-Hateful Meme Challenge 
+Hateful Meme Challenge -> https://www.drivendata.org/competitions/group/hateful-memes/
 
 Conceptual Caption Dataset -> https://www.kaggle.com/datasets/danielkaplan/conceptual-captions-8m12m | https://ai.google.com/research/ConceptualCaptions/download 
 
-f
+Multimodal Hate Speech Dataset -> https://www.kaggle.com/datasets/victorcallejasf/multimodal-hate-speech
 
 ### Training the Multimodal Graph Network
 ```
