@@ -15,6 +15,7 @@ There has been a sharp increase in the number of people using social media recen
 - tqdm
 
 ### Code Structure 
+```
 ├── environment.yml
 ├── hpc.md
 ├── LICENSE
@@ -54,7 +55,7 @@ There has been a sharp increase in the number of people using social media recen
     │   ├── SuperGATTrainer.py
     │   └── VGAETrainer.py
     └── utils.py
-
+```
 ### Dataset
 Hateful Meme Challenge 
 
