@@ -14,10 +14,53 @@ There has been a sharp increase in the number of people using social media recen
 - timm
 - tqdm
 
+### Code Structure 
+├── environment.yml
+├── hpc.md
+├── LICENSE
+├── logs
+├── model_config.cfg
+├── poetry.lock
+├── pyproject.toml
+├── README.md
+└── ssl_gnn_multimodal
+    ├── config.py
+    ├── Dataset
+    │   ├── ConceptualCaptionDataset.py
+    │   ├── fetch-conceptual-caption-data.py
+    │   ├── HatefulMemeDataset.py
+    │   ├── __init__.py
+    │   ├── preprocess.py
+    ├── main.py
+    ├── Models
+    │   ├── DeepVGAE.py
+    │   ├── Encoder.py
+    │   ├── GAT.py
+    │   ├── GCN.py
+    │   ├── GMAE.py
+    │   ├── GraphLearn.py
+    │   ├── HeteroGNN.py
+    │   ├── LanguageAndVisionConcat.py
+    │   ├── MLPClassifier.py
+    │   └── SAGE.py
+    ├── sbatch
+    ├── Trainers
+    │   ├── BaseTrainer.py
+    │   ├── GMAETrainer.py
+    │   ├── __init__.py
+    │   ├── MMGATTrainer.py
+    │   ├── MMGNNTrainer.py
+    │   ├── MMSAGETrainer.py
+    │   ├── SuperGATTrainer.py
+    │   └── VGAETrainer.py
+    └── utils.py
+
 ### Dataset
 Hateful Meme Challenge 
+
 Conceptual Caption Dataset -> https://www.kaggle.com/datasets/danielkaplan/conceptual-captions-8m12m | https://ai.google.com/research/ConceptualCaptions/download 
 
+f
 
 ### Training the Multimodal Graph Network
 ```
