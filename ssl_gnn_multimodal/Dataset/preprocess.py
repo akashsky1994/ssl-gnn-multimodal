@@ -1,6 +1,8 @@
 import os
 import json
 import time
+import argparse
+
 from PIL import Image
 
 from glob import glob
@@ -11,7 +13,6 @@ import torchvision
 from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.resnet import ResNet50_Weights
 import numpy as np
-
 
 def generate_and_store_image_features(data,image_feature_model,image_transform,device,BATCHSIZE):
     n = len(data)
@@ -32,8 +33,13 @@ def generate_and_store_image_features(data,image_feature_model,image_transform,d
             torch.save(img_feats.detach().cpu(),"{}.pt".format(os.path.splitext(image_path[m])[0]))
 
 if __name__=="__main__":
+    parser = argparse.ArgumentParser(description='Data Processing')
+    parser.add_argument('--dataset', '-d', type=str, dest='dataset', default='mmhs150k') 
+    parser.add_argument('--batchsize', '-b', type=int, default=32)
+    args = parser.parse_args()
+
+
     device = 'cuda'
-    BATCHSIZE = 32
     image_feature_model = torchvision.models.detection.maskrcnn_resnet50_fpn(
             weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT,
             weights_backbone=ResNet50_Weights.DEFAULT
@@ -44,16 +50,17 @@ if __name__=="__main__":
                     torchvision.transforms.ToTensor()
                 ]
             )
-    data_type = "cc12m"
-    if data_type=="hateful_meme":
+    
+    if args.dataset=="hateful_meme":
         data_path = "../datasets/hateful_memes/"
         data = [img_path for img_path in glob(os.path.join(data_path,"img/*.jpg"), recursive = True)]
-    elif data_type=="cc12m":
+    elif args.dataset=="cc12m":
         data_path = "../datasets/cc12m/"
         data = [img_path for img_path in glob(os.path.join(data_path,"*/*.jpg"), recursive = True) if os.path.exists(img_path.replace("jpg","txt"))]
-    elif data_type=="mmhs150k":
+    elif args.dataset=="mmhs150k":
         data_path = "../datasets/multimodal-hate-speech/"
-        data = [img_path for img_path in glob(os.path.join(data_path,"img_resized/*.jpg"), recursive = True) if os.path.exists(img_path.replace("jpg","json").replace("img_resized","img_txt"))]
+        data = [img_path for img_path in glob(os.path.join(data_path,"img_resized/*.jpg"), recursive = True)]
+        # data = [img_path for img_path in glob(os.path.join(data_path,"img_resized/*.jpg"), recursive = True) if os.path.exists(img_path.replace("jpg","json").replace("img_resized","img_txt"))]
 
-    generate_and_store_image_features(data,image_feature_model,image_transform,device,BATCHSIZE)
+    generate_and_store_image_features(data,image_feature_model,image_transform,device,args.batchsize)
     

@@ -1,5 +1,6 @@
 from Dataset.ConceptualCaptionDataset import ConceptualCaptionDataset
 from Dataset.HatefulMemeDataset import HatefulMemeDataset
+from Dataset.MMHS150K import MMHS150K
 
 import math
 import torch
@@ -34,6 +35,12 @@ def load_dataset(dataset_name,data_path,image_transform=None,tokenizer=None):
         n_train = n_dataset - n_test - n_dev
         train_dataset, dev_dataset, test_dataset = torch.utils.data.random_split(dataset, (n_train, n_dev, n_test))
         collate_fn = dataset.collate_fn
+    elif dataset_name=="MMHS150K":
+        train_dataset = MMHS150K(data_path,'train',image_transform,tokenizer)
+        dev_dataset = MMHS150K(data_path,'val',image_transform,tokenizer)
+        test_dataset = MMHS150K(data_path,'test',image_transform,tokenizer)
+        collate_fn = train_dataset.collate_fn
+
     else:
         raise NameError("No associated dataset found for the given name")
     

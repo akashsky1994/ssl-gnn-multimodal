@@ -61,6 +61,11 @@ Conceptual Caption Dataset -> https://www.kaggle.com/datasets/danielkaplan/conce
 
 Multimodal Hate Speech Dataset -> https://www.kaggle.com/datasets/victorcallejasf/multimodal-hate-speech
 
+### Data Preparation
+```
+python ssl_gnn_multimodal/Dataset/preprocess.py --dataset mmhs150k --batchsize 32
+```
+
 ### Training the Multimodal Graph Network
 ```
 python main.py --batchsize 16 --epochs 1 --optim Adam --model MMSAGE --workers 4 --lr 0.01

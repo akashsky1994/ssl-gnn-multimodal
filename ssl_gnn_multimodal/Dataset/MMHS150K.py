@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from PIL import Image
 
 import torch
@@ -11,7 +12,7 @@ class MMHS150K(torch.utils.data.Dataset):
         super().__init__()
         self.data_ids = [x.split('\t') for x in open(os.path.join(data_path,'splits',data_type+'_ids.txt'))]
         self.data = [json.loads(l) for l in open(os.path.join(data_path,'MMHS150K_GT.json'))]
-        self.data = {tweet_id:self.data[tweet_id]['labels'] for tweet_id in self.data_ids}
+        # self.data = {tweet_id:self.data[tweet_id]['labels'] for tweet_id in self.data_ids}
         self.data_dir = data_path
         self.image_transform = image_transform
         self.tokenizer = tokenizer  
@@ -20,12 +21,15 @@ class MMHS150K(torch.utils.data.Dataset):
         return len(self.data_ids)
     
     def __getitem__(self, index):
+        tweet_id = self.data_ids[index]
         label = 1
-        if len(set(self.data[self.data_ids[index]]).intersection(set([0,0,0])))>1:
+        if len(set(self.data[tweet_id]).intersection(set([0,0,0])))>1:
             label = 0
-        image_path = os.path.join(self.data_dir,'img_resized',self.data_ids[index]+'.jpg')
+        image_path = os.path.join(self.data_dir,'img_resized',+'.jpg')
         image = Image.open(image_path).convert("RGB")
-        text = [json.loads(l) for l in open(os.path.join(self.data_dir,'img_text',self.data_ids[index]+'.json'))][0]["img_text"]
+        # text = [json.loads(l) for l in open(os.path.join(self.data_dir,'img_text',tweet_id+'.json'))][0]["img_text"]
+        raw_string = self.data[tweet_id]['tweet_text']
+        text = ' '.join(re.sub("(@[A-Za-z0-9]+)|([^0-9A-Za-z \t])|(\w+:\/\/\S+)"," ",raw_string).split())
         img_feat_path = image_path.replace("jpg","pt")
         image_features = torch.load(img_feat_path)
         return image,text,label,image_features
