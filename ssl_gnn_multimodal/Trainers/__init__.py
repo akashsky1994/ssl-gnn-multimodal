@@ -7,18 +7,18 @@ from Trainers.SuperGATTrainer import SuperGATTrainer
 
 
 def getTrainer(config):
-    print(config['model'],"============================================")
-    if config['model']=='MMGCN':
+    print(config['trainer'],config['model'],"============================================")
+    if config['trainer']=='MMGCN':
         net = MMGNNTrainer(config)
-    elif config['model']=='MMGAT':
+    elif config['trainer']=='MMGAT':
         net = MMGATTrainer(config)
-    elif config['model']=='MMSAGE':
+    elif config['trainer']=='MMSAGE':
         net = MMSAGETrainer(config)
-    elif config['model']=="VGAE":
+    elif config['trainer']=="VGAE":
         net = VGAETrainer(config)
-    elif config['model']=="GMAE":
+    elif config['trainer']=="GMAE":
         net = GMAETrainer(config)
-    elif config['model']=="GMAE_SUPERGAT":
+    elif config['trainer']=="GMAE_SUPERGAT":
         net = SuperGATTrainer(config)
     else:
         raise NotImplementedError("Model not available")

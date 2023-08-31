@@ -42,7 +42,7 @@ class GATClassifier(torch.nn.Module):
 class DeepGNN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels,num_layers,nheads,norm_type="graph_norm",activation_type="prelu",dropout=0.3,jk=None,last_layer=True,**kwargs):
         super(DeepGNN, self).__init__()
-        self.in_channels = in_channels
+        self.in_channels = -1
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
         self.num_layers = num_layers
@@ -61,13 +61,13 @@ class DeepGNN(torch.nn.Module):
             last_act = activation
         if num_layers == 1:
             
-            self.gnn_layers.append(self.init_convs(in_channels, out_channels,nheads,dropout,concat=False,**kwargs))
+            self.gnn_layers.append(self.init_convs(self.in_channels, out_channels,nheads,dropout,concat=False,**kwargs))
             self.norms.append(last_norm)
             self.acts.append(last_act)
         else:
             # input projection
 
-            self.gnn_layers.append(self.init_convs(in_channels, (hidden_channels//nheads),nheads,dropout,**kwargs))
+            self.gnn_layers.append(self.init_convs(self.in_channels, (hidden_channels//nheads),nheads,dropout,**kwargs))
             self.norms.append(normFn(hidden_channels))
             self.acts.append(activation)
             # hidden layers
@@ -97,7 +97,7 @@ class DeepGNN(torch.nn.Module):
             
         self.head = torch.nn.Identity()
 
-    def forward(self, x, edge_index, return_hidden=False,sigmoid: bool = False):
+    def forward(self, x, edge_index):
         h = x
         hidden_list = []
         for i, (gnn_layer, norm, act) in enumerate(zip(self.gnn_layers, self.norms,self.acts)):
@@ -107,11 +107,8 @@ class DeepGNN(torch.nn.Module):
         
         # output projection
         h = self.lin(self.jk(hidden_list)) if hasattr(self, 'jk') else h
-        h = torch.sigmoid(self.head(h)) if sigmoid else self.head(h)
-        if return_hidden:
-            return h, hidden_list
-        else:
-            return h
+        h = self.head(h)
+        return h, hidden_list
         
     def get_loss(self):
         return None
@@ -119,7 +116,7 @@ class DeepGNN(torch.nn.Module):
 
 class DeepGAT(DeepGNN):
     def init_convs(self,in_channels,out_channels,nheads,dropout,concat=True,**kwargs):
-        return GATv2Conv(in_channels, out_channels,nheads,concat=concat,dropout=dropout)
+        return GATv2Conv(-1, out_channels,nheads,concat=concat,dropout=dropout,add_self_loops=False)
     
 
 class DeepSuperGAT(DeepGNN):
@@ -127,7 +124,7 @@ class DeepSuperGAT(DeepGNN):
         attention_type = kwargs.pop('attention_type', 'MX')
         edge_sample_ratio = kwargs.pop('edge_sample_ratio', 0.8)
         is_undirected = kwargs.pop('is_undirected', True)
-        return SuperGATConv(in_channels, out_channels,nheads,concat=concat,dropout=dropout,attention_type=attention_type,edge_sample_ratio=edge_sample_ratio,is_undirected=is_undirected)
+        return SuperGATConv(-1, out_channels,nheads,concat=concat,dropout=dropout,attention_type=attention_type,edge_sample_ratio=edge_sample_ratio,is_undirected=is_undirected)
     
     def get_loss(self):
         att_loss = 0

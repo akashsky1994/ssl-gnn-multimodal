@@ -5,10 +5,10 @@ import numpy as np
 from torch_geometric.nn import MLPAggregation
 
 from Trainers import MMGNNTrainer
-from Models.GMAE import GMAE
+from Models.GMAE import GMAE,HeteroGMAE
 from Models.GAT import DeepGAT
 from Models.MLPClassifier import MLPClassifier
-from Models.GraphLearn import GraphLearn
+from Models.GraphLearn import GraphLearn,HeteroGraphLearn
 
 from utils import evaluate_graph_embeddings_using_svm,graph_emb_pooling
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, average_precision_score
@@ -26,11 +26,45 @@ class GMAETrainer(MMGNNTrainer):
         # Model
         print('==> Building model..')
 
-        graph_encoder = DeepGAT(in_channels=PROJECTION_DIM,hidden_channels=2*GNN_OUT_CHANNELS,out_channels=GNN_OUT_CHANNELS,num_layers=3,nheads=4,last_layer=True,jk=self.config.get('jk'),norm_type="graph_norm",activation_type="prelu",dropout=0.3).to(self.device)
-        graph_decoder = DeepGAT(in_channels=GNN_OUT_CHANNELS,hidden_channels=GNN_OUT_CHANNELS,out_channels=PROJECTION_DIM,num_layers=1,nheads=4,last_layer=False,norm_type="graph_norm",activation_type="prelu",dropout=0.3).to(self.device)
+        graph_encoder = DeepGAT(
+            in_channels=PROJECTION_DIM,
+            hidden_channels=2*GNN_OUT_CHANNELS,
+            out_channels=GNN_OUT_CHANNELS,
+            num_layers=3,
+            nheads=4,
+            last_layer=True,
+            jk=self.config.get('jk'),
+            norm_type="graph_norm",
+            activation_type="prelu",
+            dropout=0.3
+        ).to(self.device)
+
+        graph_decoder = DeepGAT(
+            in_channels=GNN_OUT_CHANNELS,
+            hidden_channels=GNN_OUT_CHANNELS,
+            out_channels=PROJECTION_DIM,
+            num_layers=1,nheads=4,
+            last_layer=False,
+            norm_type="graph_norm",
+            activation_type="prelu",
+            dropout=0.3
+        ).to(self.device)
+
+        graph_learn = GraphLearn
+        gnn = GMAE
+        if self.config.get('hetero',False):
+            graph_learn = HeteroGraphLearn
+            gnn = HeteroGMAE
+
+        
         self.models = {
-            'graph_learning':GraphLearn(PROJECTION_DIM,trainable=self.pretrain).to(self.device),
-            'graph':GMAE(graph_encoder,graph_decoder).to(self.device),
+            'graph_learning':graph_learn(
+                image_model=self.config.get('image_encoder'),
+                text_model=self.config.get('text_encoder'),
+                trainable=self.pretrain,
+                projection_dim=PROJECTION_DIM
+            ).to(self.device),
+            'graph':gnn(graph_encoder,graph_decoder).to(self.device),
             'classifier':None
         }
         
@@ -57,7 +91,7 @@ class GMAETrainer(MMGNNTrainer):
                    
             if self.pretrain is True:
                 # Graph Autoencoder Self-Supervised Learning
-                recon_loss,encoder_loss = self.models['graph'](g_data)
+                recon_loss,encoder_loss = self.models['graph'](g_data.x_dict,g_data.edge_index_dict)
                 loss = recon_loss.sum()
                 if encoder_loss is not None:
                     loss = self.config.get('recon_loss_coef',1.0)*loss + self.config.get('encoder_loss_coef',4.0)*(encoder_loss.sum())
