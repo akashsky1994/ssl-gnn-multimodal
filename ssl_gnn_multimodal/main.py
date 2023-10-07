@@ -18,6 +18,8 @@ def main():
     parser.add_argument('--data_path', '-d', type=str, dest='datapath')
     parser.add_argument('--dataset', '-ds',default='HATEFULMEME', dest='dataset', type=str)
     parser.add_argument('--pretrain', '-pt',action='store_true')
+    parser.add_argument('--hetero', '-ht',action='store_true',help='heterogenous graph processing')
+    
     parser.add_argument(
         "--conf", action="store", dest="conf_file",
         help="Path to config file"

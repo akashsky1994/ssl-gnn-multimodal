@@ -18,3 +18,5 @@ cd /scratch/am11533/ssl-gnn-multimodal
 python ssl_gnn_multimodal/main.py --model GMAE --dataset HATEFULMEME --data_path ../datasets/hateful_memes/  --resume ./checkpoints/GMAE/pretrain/
 
 # ``nohup python -u ssl_gnn_multimodal/main.py --model GMAE --data_path ../datasets/hateful_memes/  --resume ./checkpoints/GMAE/pretrain/ > output_gmae_pretrain_$(date +%s).log &``
+
+# python ssl_gnn_multimodal/main.py --model GMAE --dataset HATEFULMEME --data_path ../datasets/hateful_memes/ --pretrain --hetero

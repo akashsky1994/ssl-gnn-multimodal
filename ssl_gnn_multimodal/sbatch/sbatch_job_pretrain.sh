@@ -15,4 +15,5 @@ conda activate ssl-gnn-env
 
 cd /scratch/am11533/ssl-gnn-multimodal
 
-python ssl_gnn_multimodal/main.py --pretrain --model GMAE --dataset CONCEPTUALCAPTION --data_path ../datasets/cc12m/  --resume ./checkpoints/GMAE/pretrain/ 
+# python ssl_gnn_multimodal/main.py --pretrain --model GMAE --dataset CONCEPTUALCAPTION --data_path ../datasets/cc12m/  --resume ./checkpoints/GMAE/pretrain/ 
+python ssl_gnn_multimodal/main.py --pretrain --model GMAE --dataset MMHS150K --data_path ../datasets/multimodal-hate-speech/  --resume ./checkpoints/GMAE/pretrain/ 

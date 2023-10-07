@@ -12,7 +12,7 @@ import time
 from tqdm import tqdm
 from Dataset import load_dataset
 from torch.utils.data import DataLoader
-from utils import get_device
+from utils import get_device,get_tokenizer
 
 class BaseTrainer():
     def __init__(self,config) -> None:
@@ -49,7 +49,8 @@ class BaseTrainer():
 
 
     def load_dataset(self):
-        train_dataset,dev_dataset,test_dataset,collate_fn = load_dataset(self.dataset_name,self.data_path) 
+        tokenizer = get_tokenizer(self.config.get('tokenizer','distilbert'))
+        train_dataset,dev_dataset,test_dataset,collate_fn = load_dataset(self.dataset_name,self.data_path,tokenizer=tokenizer)
         
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size*self.n_gpus, shuffle=True, num_workers=self.num_workers,collate_fn=collate_fn)
 
@@ -81,7 +82,8 @@ class BaseTrainer():
 
     def setEval(self):
         for model in self.models.values():
-            model.eval()
+            if model is not None:
+                model.eval()
 
     def build_model(self):
         raise NotImplementedError

@@ -10,6 +10,8 @@ from sklearn.svm import SVC
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, average_precision_score
 import numpy as np
 
+from transformers import RobertaTokenizer,AutoTokenizer,DistilBertTokenizer
+
 def get_device():
     n_gpus = 1
     if torch.cuda.is_available():
@@ -87,3 +89,18 @@ def graph_emb_pooling(pooler,enc_rep,g_data):
         raise NotImplementedError
     
     return graph_emb
+
+
+def get_tokenizer(tokenizer_type,**kwargs):
+    if tokenizer_type=='distilbert':
+        tokenizer_name = kwargs.pop('tokenizer_name',"distilbert-base-uncased") #TODO
+        tokenizer = DistilBertTokenizer.from_pretrained(tokenizer_name)
+    elif tokenizer_type=="roberta":
+        tokenizer_name = kwargs.pop('tokenizer_name',"roberta-base")
+        tokenizer = RobertaTokenizer.from_pretrained(tokenizer_name)
+    elif tokenizer_name=="hateful_bert":
+        model_name = 'Hate-speech-CNERG/bert-base-uncased-hatexplain'
+        tokenizer = AutoTokenizer.from_pretrained(model_name, do_lower_case=True)
+
+    return tokenizer
+    

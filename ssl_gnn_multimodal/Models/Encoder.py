@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import timm
-from transformers import DistilBertModel, DistilBertConfig, DistilBertTokenizer
+from transformers import DistilBertModel, DistilBertConfig, RobertaModel ,RobertaConfig
 
 class ImageEncoder(nn.Module):
     """
@@ -15,6 +15,7 @@ class ImageEncoder(nn.Module):
         self.model = timm.create_model(
             model_name, pretrained, num_classes=0, global_pool="avg"
         )
+        self.out_features = 2048 #TODO make it generic
         for p in self.model.parameters():
             p.requires_grad = trainable
 
@@ -23,12 +24,10 @@ class ImageEncoder(nn.Module):
 
 
 class TextEncoder(nn.Module):
-    def __init__(self, model_name='distilbert-base-uncased', pretrained=True, trainable=True):
+    def __init__(self, model_name='distilbert', pretrained=True, trainable=True):
         super().__init__()
-        if pretrained:
-            self.model = DistilBertModel.from_pretrained(model_name)
-        else:
-            self.model = DistilBertModel(config=DistilBertConfig())
+        
+        self.model,self.out_features = resolve_text_model(model_name,pretrained)
             
         for p in self.model.parameters():
             p.requires_grad = trainable
@@ -66,3 +65,22 @@ class ProjectionHead(nn.Module):
         x = x + projected
         x = self.layer_norm(x)
         return x
+    
+
+def resolve_text_model(model_name,pretrained):
+    if model_name=='distilbert':
+        if pretrained:
+            model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+        else:
+            model = DistilBertModel(config=DistilBertConfig())
+        out_features = model.transformer.layer[-1].ffn.lin2.out_features
+    elif model_name=='roberta':
+        if pretrained:
+            model = RobertaModel.from_pretrained('roberta-base')
+        else:
+            model = RobertaModel(config=RobertaConfig())
+        out_features = model.pooler.dense.out_features
+    return model,out_features
+
+if __name__ == "__main__":
+    print(ImageEncoder())
